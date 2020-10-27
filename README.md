@@ -10,6 +10,6 @@ Link to raw data source (GSE 157852)
 A bash file executing salmon transcription mapping (with decoy) returning .sf files 
 
 **3. singlequant.Rmd**    
-R code for extracting count data from .sf file and performing downstream DE analysis
+R code for extracting count data from .sf files and performing downstream DE analysis
 
 
