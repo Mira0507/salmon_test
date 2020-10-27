@@ -94,6 +94,24 @@ SampleNames <-  c("Mock_72hpi_S1",
                  "SARS-CoV-2_72hpi_S8",
                  "SARS-CoV-2_72hpi_S9") 
 
+# Define group level
+GroupLevel <- c("Mock", "COVID")
+
+# Define contrast for DE analysis
+Contrast <- c("Group", "COVID", "Mock")
+
+# Set a directory to save image files 
+PlotPath <- "./plotting"
+dir.create(PlotPath)
+
+# Define a function to save image files
+ImageSave_fn <- function(ImageObject, Name) {
+    jpeg(file=(paste0(PlotPath, Name)))
+    ImageObject
+    dev.off()
+}
+
+
 
 # Define .sf file path
 sf <- c(paste0("./", 
@@ -105,10 +123,13 @@ group <- c(rep("Mock", 3), rep("COVID", 3))
 
 # Create metadata
 metadata <- data.frame(Sample=factor(SampleNames, levels=SampleNames),
-                       Group=factor(group, levels=c("Mock", "COVID")),
+                       Group=factor(group, levels=GroupLevel),
                        Path=sf)
 
 rownames(metadata) <- SampleNames
+
+# Explore the metadata
+print(metadata)
 ```
 
 ## Extracting TPM Data from .sf files 
@@ -189,7 +210,8 @@ LibSize <- data.frame(Read=LibSizeTable) %>%
                by="Sample")
 
 # Creat a bar plot presenting library size of the dataset
-ggplot(LibSize,
+LibSizePlot <- 
+    ggplot(LibSize,
        aes(x=Sample,
            y=Read,
            fill=Group,
@@ -203,6 +225,11 @@ ggplot(LibSize,
            theme(axis.text.x=element_text(angle=45, 
                                           vjust=0.5))
 
+# Print the plot
+print(LibSizePlot)
+
+# Save the plot
+ImageSave_fn(LibSizePlot, "/LibSizePlot.jpg")
 
 ```
 
@@ -220,7 +247,8 @@ txDistribution <- gather(TPMTable,
 
 
 # Create a density plot presenting distribution of transcripts
-ggplot(txDistribution,
+TranscriptDistPlot <-
+    ggplot(txDistribution,
        aes(x=Read,
            color=Sample)) + 
            geom_density(alpha=0.5) + 
@@ -229,6 +257,16 @@ ggplot(txDistribution,
            xlab("Number of Transcripts (TPM)") +
            ylab("Density") + 
            scale_x_log10()
+
+
+# Print the plot       
+print(TranscriptDistPlot)
+
+
+# Save the plot
+ImageSave_fn(TranscriptDistPlot, 
+             "/TranscriptDistPlot.jpg")
+
 
 ```
 
@@ -261,6 +299,10 @@ FinalMultiplication <- MinRange * 10
 # Convert TPM integer 
 TPMMatrix <- as.matrix(TPMMatrix * FinalMultiplication)
 TPMMatrix <- round(TPMMatrix)
+
+
+# Check out the cleaned TPM matrix
+head(TPMMatrix)
 ```
 
 ## Creating an DESeq object and VST
@@ -298,7 +340,8 @@ sizeFactor <- sizeFactor %>%
     inner_join(metadata[, 1:ncol(metadata)-1], by="Sample") 
 
 # Create a plot comparing the size factors by sample
-ggplot(sizeFactor, aes(x=Sample, 
+SizeFactorPlot <- 
+    ggplot(sizeFactor, aes(x=Sample, 
                        y=Size_Factor, 
                        fill=Group,
                        label=Size_Factor)) +
@@ -308,14 +351,24 @@ ggplot(sizeFactor, aes(x=Sample,
     geom_text(vjust=1.5) +
     theme(axis.text.x=element_text(angle=45, 
                                    vjust=0.5)) + 
-ylab("Size Factor") 
+ylab("Size Factor")
+
+# Print the plot 
+print(SizeFactorPlot)
+
+# Save the plot
+ImageSave_fn(SizeFactorPlot, 
+             "/SizeFactorPlot.jpg")
+
+# Extract sizefactor-normalized counts
+normCounts <- counts(dds, normalized=TRUE)
+head(normCounts)
 
 # Calculate and add dispersions to the DEseq object
 dds <- estimateDispersions(dds)
 
 # Add wald test to the DESeq object
 dds <- nbinomWaldTest(dds)
-
 
 ```
 
@@ -326,7 +379,7 @@ dds <- nbinomWaldTest(dds)
 ```{r QC_PCA}
 
 # Assigne what to compare
-GroupOfInterest <- c("Group")
+GroupOfInterest <- Contrast[1] 
 
 # Extract PCA eigenvalues 
 PCAMatrix <- plotPCA(vsd,
@@ -334,11 +387,19 @@ PCAMatrix <- plotPCA(vsd,
         returnData=TRUE)  
 
 # Create a PCA plot 
-plotPCA(vsd,
+QCPCAPlot<- 
+    plotPCA(vsd,
         intgroup=GroupOfInterest,
         returnData=FALSE) +
 theme_bw() +
 ggtitle("PCA")
+
+# Print the plot
+print(QCPCAPlot)
+
+# Save the plot
+ImageSave_fn(QCPCAPlot, 
+             "/QCPCAPlot.jpg")
 
 ```
 
@@ -356,33 +417,127 @@ HeatmapAnno <- as.data.frame(HeatmapAnno)
 
 # Create a heatmap
 pheatmap(EigenValues, 
-         annotation_row=HeatmapAnno, main="Sample Clustering Heatmap")
+         annotation_row=HeatmapAnno, 
+         main="Sample Clustering Heatmap")
 
 
 ```
 
 
-
+## Running DE analysis
 
 
 ```{r DE_analysis}
 
-# Running DESeq 
+# Run DESeq 
 dds <- DESeq(dds)
 
-# Extracting DE results
-res <- results(dds, contrast=c("Group", "COVID", "Mock"))
 
 # Check result names 
-resultsNames(dds)
+ResNames <- resultsNames(dds)
 
 
 ```
+
+
+## Setting how to extract fold-change results
+### Change variables below
+
+```{r setting_resultcondition}
+
+
+# Set the threshold of FDR as a variable "alpha" 
+alpha=0.1
+
+# Set the coefficients to compare 
+Coef <- ResNames[-1]
+print(Coef) 
+
+
+# Set a function to clean result table 
+LFCTable_fn <- function(df) {
+
+    df <- df %>% 
+        rownames_to_column(var="Annotation") %>%
+        separate("Annotation", c("Transcript", "Gene"))
+
+    return(df)
+}
+```
+
+## Extracting log2FoldChanges
+### You can change alpha depending on your interest of FDR level
+
+
+
+```{r DEresult_extraction}
+
+# Extract DE results
+# The Contrast variable was defined in the preparing_importing.sf chunk
+
+
+
+# Extraction with no shrinkage
+# alpha: FDR threshold
+Res <- results(dds, contrast=Contrast, alpha=alpha)
+
+# Extracttion without shrinkage in a list 
+# name has to be determined in the previous chunk
+resList <- list()
+
+for (i in 1:length(Coef)) {
+
+    myresult <- lfcShrink(dds,
+                          coef=Coef[i],
+                          type="apeglm")
+    resList[i] <- myresult
+}
+
+
+
+```
+
+## Determining what comparison to explore 
+### Checkout resList in the previous chunk and save it to a data frame 
 
 
 ```{r}
 
+# Save data of interest as a data frame for further analysis 
+shRes <- as.data.frame(resList[[1]])
+
+# Row names to columns (Transcripts, Gene)
+shRes <- LFCTable_fn(shRes)
+
+head(shRes)
 ```
+
+
+```{r FDR_distribution}
+
+# Create a plot presenting distribution of FDR
+FDR_distPlot <- 
+    ggplot(shRes,
+           aes(x=padj)) + 
+geom_density() + 
+theme_bw() +
+ggtitle("Distribution of False Discovery Rate (FDR)") + 
+xlab("Adjusted P-Value") + 
+ylab("Density") 
+
+# Print the plot
+print(FDR_distPlot)
+
+# Save the plot
+ImageSave_fn(FDR_distPlot, 
+             "/FDR_distPlot.jpg")
+
+
+
+```
+
+
+
 
 
 ## Session Info 
