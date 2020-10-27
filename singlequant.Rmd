@@ -1,0 +1,293 @@
+---
+output: html_document
+---
+
+```{r global_options, include=FALSE}
+
+knitr::opts_chunk$set(
+    warning=FALSE,
+    message=FALSE
+    )
+
+```
+
+```{r loading_packages}
+library(data.table)
+library(rmarkdown)
+library(AnnotationHub)
+library(tidyverse)
+library(tximport)
+library(ggplot2)
+library(DESeq2)
+library(pheatmap)
+```
+
+```{r annotationhub_setup}
+
+AnnotationSpecies <- "Homo sapiens"  # Assign your species 
+MyCache <- "../rawdata/AnnoCache"
+ah <- AnnotationHub(hub=getAnnotationHubOption("URL"))   # Bring annotation DB
+
+```
+
+
+```{r run_annotationhub}
+
+ahQuery <- query(ah, c("OrgDb", AnnotationSpecies))      # Filter annotation of interest
+
+if (length(ahQuery) == 1) {
+    DBName <- names(ahQuery)
+} else if (length(ahQuery) > 1) {
+               DBName <- names(ahQuery)[1]
+} else {
+    print("You don't have a valid DB")
+    rmarkdown::render() 
+} 
+
+AnnoDb <- ah[[DBName]] # Store into an OrgDb object  
+
+
+# Explore your OrgDb object with following accessors:
+# columns(AnnpDb)
+# keytypes(AnnoDb)
+# keys(AnnoDb, keytype=..)
+# select(AnnoDb, keys=.., columns=.., keytype=...)
+AnnoKey <- keys(AnnoDb, keytype="ENSEMBLTRANS")
+
+# Note: Annotation has to be done with not genome but transcripts 
+AnnoDb <- select(AnnoDb, 
+                 AnnoKey,
+                 keytype="ENSEMBLTRANS",
+                 columns="SYMBOL")
+
+```
+
+```{r, include=FALSE}
+
+# Check if your AnnoDb has been extracted and saved correctely
+class(AnnoDb)
+head(AnnoDb)
+
+```
+
+```{r preparing_importing.sf}
+
+# This code chunk needs to be written by yourself 
+
+# Define sample names 
+SampleNames <-  c("Mock_72hpi_S1",
+                 "Mock_72hpi_S2",
+                 "Mock_72hpi_S3",
+                 "SARS-CoV-2_72hpi_S7",
+                 "SARS-CoV-2_72hpi_S8",
+                 "SARS-CoV-2_72hpi_S9") 
+
+
+# Define .sf file path
+sf <- c(paste0("./", 
+               SampleNames,
+               ".fastq.gz.salmon_quant/quant.sf"))
+
+# Define sample groups
+group <- c(rep("Mock", 3), rep("COVID", 3))
+
+# Create metadata
+metadata <- data.frame(Sample=factor(SampleNames, levels=SampleNames),
+                       Group=factor(group, levels=c("Mock", "COVID")),
+                       Path=sf)
+
+rownames(metadata) <- SampleNames
+```
+
+
+```{r saving_tpm_to_dataframe}
+
+
+TPMTable <- data.frame(Transcript=AnnoDb$ENSEMBLTRANS,
+    Gene=AnnoDb$SYMBOL)
+
+# Extract TPM and combine to the TPMTable data frame
+ for (x in sf) {
+        
+        txi <- tximport(x,            # path for a quant.sf file  
+                        type="salmon",     
+                        tx2gene=AnnoDb,txOut=TRUE)
+
+        tpm <- as.data.frame(txi$abundance) 
+         
+        tpm <- rownames_to_column(tpm, var = colnames(TPMTable)[1]) 
+
+        TPMTable <- full_join(TPMTable, 
+                              tpm, 
+                              by=colnames(TPMTable)[1])
+
+ }
+
+
+# Assign column names to sample names 
+colnames(TPMTable)[3:ncol(TPMTable)] <- SampleNames
+```
+
+
+```{r treaming_TPMTable}
+
+# Remove NA-containing transcripts
+TPMTable <- TPMTable[complete.cases(TPMTable),]
+
+
+# Remove zero-TPM transcripts 
+nonzeroTPM <- rowSums(TPMTable[3:ncol(TPMTable)]) > 0
+TPMTable <- TPMTable[nonzeroTPM,]
+
+
+```
+
+
+
+```{r exploring_TPMTable, include=FALSE}
+
+# Exploratory data analysis
+dim(TPMTable)
+head(TPMTable)
+summary(TPMTable)
+
+# Save the raw tpm table as a csv file
+write.csv(TPMTable, "Read_TPM.csv")
+```
+
+
+
+```{r library_size}
+
+# Create a library size table
+LibSizeTable <- colSums(TPMTable[3:ncol(TPMTable)], 
+                        na.rm=TRUE) 
+
+# Data Cleaning
+LibSize <- data.frame(Read=LibSizeTable) %>%
+    rownames_to_column(var="Sample") %>%
+    inner_join(metadata[, c("Sample", "Group")],
+               by="Sample")
+
+# Creat a bar plot presenting library size of the dataset
+ggplot(LibSize,
+       aes(x=Sample,
+           y=Read,
+           fill=Group,
+           label=round(Read))) +
+           geom_bar(stat="identity", width=0.8) +
+           ggtitle("Library Size") +
+           ylab("Number of Total Transcripts (TPM)") +
+           theme_bw() + 
+           scale_y_log10() +
+           geom_text(vjust=-1) +
+           theme(axis.text.x=element_text(angle=45, 
+                                          vjust=0.5))
+
+
+```
+
+
+```{r distribution_of_transcripts}
+
+# Data Cleaning
+txDistribution <- gather(TPMTable,
+                         "Sample",
+                         "Read",
+                         -c(Transcript,
+                            Gene))
+
+
+# Create a density plot presenting distribution of transcripts
+ggplot(txDistribution,
+       aes(x=Read,
+           color=Sample)) + 
+           geom_density(alpha=0.5) + 
+           theme_bw() +
+           ggtitle("Distribution of Total Transcripts") + 
+           xlab("Number of Transcripts (TPM)") +
+           ylab("Density") + 
+           scale_x_log10()
+
+```
+
+
+
+```{r deseq_datacleaning}
+
+# Assigne rownames: Transcript_Gene
+RowNames <- paste(TPMTable$Transcript, TPMTable$Gene, sep="_")
+rownames(TPMTable) <- RowNames
+
+# Build a count matrix without Transcript/Gene
+TPMMatrix <- TPMTable[, SampleNames]
+
+# Determine integer range
+MaxColumnMean <- max(colMeans(TPMMatrix)) 
+logScale <- c(1e6, 1e5, 1e4, 1e3, 1e2, 10, 1) 
+MinRange <- 0 
+for (x in logScale) {
+    num = x - MaxColumnMean
+    if (num > 0) {
+        MinRange <- x
+    }
+}
+FinalMultiplication <- MinRange * 10
+
+
+# Convert TPM integer 
+TPMMatrix <- as.matrix(TPMMatrix * FinalMultiplication + 1)
+TPMMatrix <- round(TPMMatrix)
+```
+
+
+```{r creating_DESeqObject}
+
+dds <- DESeqDataSetFromMatrix(TPMMatrix, 
+                              colData=metadata,
+                              design=~Group)
+
+vsd <- varianceStabilizingTransformation(dds,
+                                         blind=TRUE) 
+```
+
+
+```{r QC_PCA}
+
+GroupOfInterest <- c("Group")
+
+PCAMatrix <- plotPCA(vsd,
+        intgroup=GroupOfInterest,
+        returnData=TRUE)  
+
+
+plotPCA(vsd,
+        intgroup=GroupOfInterest,
+        returnData=FALSE) +
+theme_bw() +
+ggtitle("PCA")
+
+```
+
+
+```{r QC_heatmap}
+
+EigenValues <- PCAMatrix[, c("PC1", "PC2")]
+HeatmapAnno <- PCAMatrix[, GroupOfInterest]
+names(HeatmapAnno) <- rownames(PCAMatrix)
+HeatmapAnno <- as.data.frame(HeatmapAnno)
+
+pheatmap(EigenValues, annotation=HeatmapAnno)
+
+
+```
+
+
+```{r}
+
+```
+
+
+```{r}
+
+```
