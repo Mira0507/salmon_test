@@ -3,13 +3,13 @@
 
 ### File Description 
 
-**1. source.txt**\n
+**1. source.txt**     
 Link to raw data source (GSE 157852)
 
-**2. singlequant.sh**\n 
+**2. singlequant.sh**    
 A bash file executing salmon transcription mapping (with decoy) returning .sf files 
 
-**3. singlequant.Rmd**\n
+**3. singlequant.Rmd**    
 R code for extracting count data from .sf file and performing downstream DE analysis
 
 
