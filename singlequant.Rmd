@@ -11,6 +11,8 @@ knitr::opts_chunk$set(
 
 ```
 
+## Loading packages
+
 ```{r loading_packages}
 library(data.table)
 library(rmarkdown)
@@ -22,6 +24,8 @@ library(DESeq2)
 library(pheatmap)
 ```
 
+## Setting AnnotationHub
+
 ```{r annotationhub_setup}
 
 AnnotationSpecies <- "Homo sapiens"  # Assign your species 
@@ -30,6 +34,7 @@ ah <- AnnotationHub(hub=getAnnotationHubOption("URL"))   # Bring annotation DB
 
 ```
 
+## Running AnnotationHub Depending on Output of Interest
 
 ```{r run_annotationhub}
 
@@ -62,13 +67,20 @@ AnnoDb <- select(AnnoDb,
 
 ```
 
-```{r, include=FALSE}
+
+## Checking AnnotationHub Output 
+
+```{r checking_annotationhub_output}
 
 # Check if your AnnoDb has been extracted and saved correctely
 class(AnnoDb)
 head(AnnoDb)
 
 ```
+
+## Defining File Name and Path for .sf Files
+### .sf files have been created from fastq data by salmon
+
 
 ```{r preparing_importing.sf}
 
@@ -99,6 +111,8 @@ metadata <- data.frame(Sample=factor(SampleNames, levels=SampleNames),
 rownames(metadata) <- SampleNames
 ```
 
+## Extracting TPM Data from .sf files 
+
 
 ```{r saving_tpm_to_dataframe}
 
@@ -128,6 +142,8 @@ TPMTable <- data.frame(Transcript=AnnoDb$ENSEMBLTRANS,
 colnames(TPMTable)[3:ncol(TPMTable)] <- SampleNames
 ```
 
+## Data Trimming (NA and zero-TPM transcripts)
+
 
 ```{r treaming_TPMTable}
 
@@ -142,9 +158,11 @@ TPMTable <- TPMTable[nonzeroTPM,]
 
 ```
 
+## Exploring Cleaned TPM Data
+### Saving as a csv file
 
 
-```{r exploring_TPMTable, include=FALSE}
+```{r exploring_TPMTable}
 
 # Exploratory data analysis
 dim(TPMTable)
@@ -155,6 +173,7 @@ summary(TPMTable)
 write.csv(TPMTable, "Read_TPM.csv")
 ```
 
+## Plotting Library Size per Sample
 
 
 ```{r library_size}
@@ -180,12 +199,14 @@ ggplot(LibSize,
            ylab("Number of Total Transcripts (TPM)") +
            theme_bw() + 
            scale_y_log10() +
-           geom_text(vjust=-1) +
+           geom_text(vjust=1.5) +
            theme(axis.text.x=element_text(angle=45, 
                                           vjust=0.5))
 
 
 ```
+
+## Plotting Distribution of TPM per Sample
 
 
 ```{r distribution_of_transcripts}
@@ -211,6 +232,8 @@ ggplot(txDistribution,
 
 ```
 
+## Cleaning TPM Data for DESeq
+### Converting Raw TPM to an integer matrix
 
 
 ```{r deseq_datacleaning}
@@ -236,12 +259,15 @@ FinalMultiplication <- MinRange * 10
 
 
 # Convert TPM integer 
-TPMMatrix <- as.matrix(TPMMatrix * FinalMultiplication + 1)
+TPMMatrix <- as.matrix(TPMMatrix * FinalMultiplication)
 TPMMatrix <- round(TPMMatrix)
 ```
 
+## Creating an DESeq object and VST
+
 
 ```{r creating_DESeqObject}
+
 
 dds <- DESeqDataSetFromMatrix(TPMMatrix, 
                               colData=metadata,
@@ -249,18 +275,65 @@ dds <- DESeqDataSetFromMatrix(TPMMatrix,
 
 vsd <- varianceStabilizingTransformation(dds,
                                          blind=TRUE) 
+
+
+
+
+```
+
+## Estimating Size Factors, Dispersions, and Conducting Wald Test
+
+
+```{r sizefactors}
+
+
+# Calculate and add size factors to the DEseq object
+dds <- estimateSizeFactors(dds)
+
+# Extract and save the size factors as a data frame
+sizeFactor <- as.data.frame(round(sizeFactors(dds), 3))
+colnames(sizeFactor) <- 'Size_Factor'
+sizeFactor <- sizeFactor %>%
+    rownames_to_column(var="Sample") %>%
+    inner_join(metadata[, 1:ncol(metadata)-1], by="Sample") 
+
+# Create a plot comparing the size factors by sample
+ggplot(sizeFactor, aes(x=Sample, 
+                       y=Size_Factor, 
+                       fill=Group,
+                       label=Size_Factor)) +
+    geom_bar(stat="identity", width=0.8) +
+    theme_bw() + 
+    ggtitle("Size Factors") +
+    geom_text(vjust=1.5) +
+    theme(axis.text.x=element_text(angle=45, 
+                                   vjust=0.5)) + 
+ylab("Size Factor") 
+
+# Calculate and add dispersions to the DEseq object
+dds <- estimateDispersions(dds)
+
+# Add wald test to the DESeq object
+dds <- nbinomWaldTest(dds)
+
+
 ```
 
 
+
+## Sample QC: Principal Component Analysis
+
 ```{r QC_PCA}
 
+# Assigne what to compare
 GroupOfInterest <- c("Group")
 
+# Extract PCA eigenvalues 
 PCAMatrix <- plotPCA(vsd,
         intgroup=GroupOfInterest,
         returnData=TRUE)  
 
-
+# Create a PCA plot 
 plotPCA(vsd,
         intgroup=GroupOfInterest,
         returnData=FALSE) +
@@ -269,15 +342,39 @@ ggtitle("PCA")
 
 ```
 
+## Sample QC: Sample Clustering Heatmap
 
 ```{r QC_heatmap}
 
-EigenValues <- PCAMatrix[, c("PC1", "PC2")]
+# Clean the extracted PCA eigenvalue data 
+EigenValues <- as.matrix(PCAMatrix[, c("PC1", "PC2")])
+
+# Setting heatmap metadata for annotation
 HeatmapAnno <- PCAMatrix[, GroupOfInterest]
 names(HeatmapAnno) <- rownames(PCAMatrix)
 HeatmapAnno <- as.data.frame(HeatmapAnno)
 
-pheatmap(EigenValues, annotation=HeatmapAnno)
+# Create a heatmap
+pheatmap(EigenValues, 
+         annotation_row=HeatmapAnno, main="Sample Clustering Heatmap")
+
+
+```
+
+
+
+
+
+```{r DE_analysis}
+
+# Running DESeq 
+dds <- DESeq(dds)
+
+# Extracting DE results
+res <- results(dds, contrast=c("Group", "COVID", "Mock"))
+
+# Check result names 
+resultsNames(dds)
 
 
 ```
@@ -288,6 +385,8 @@ pheatmap(EigenValues, annotation=HeatmapAnno)
 ```
 
 
-```{r}
+## Session Info 
 
+```{r sessionInfo}
+sessionInfo()
 ```
