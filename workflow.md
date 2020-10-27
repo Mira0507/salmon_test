@@ -1,5 +1,11 @@
-### 1. Conda Environment    
-I created and used a simple conda environment. 
+### 1. Setting Conda Environment    
+I created and used a simple conda environment. Check out docs below for more info:   
+
+- **Conda**: https://docs.conda.io/projects/conda/en/latest/user-guide/tasks/manage-environments.html
+- **Salmon**: https://salmon.readthedocs.io/en/latest/
+- **R**: https://cran.r-project.org/
+- **AnnotationHub**: https://bioconductor.org/packages/devel/bioc/vignettes/AnnotationHub/inst/doc/AnnotationHub.html 
+- **DESeq2**: http://bioconductor.org/packages/devel/bioc/vignettes/DESeq2/inst/doc/DESeq2.html 
 
 ```environment.yml
 name: salmon
@@ -30,7 +36,7 @@ conda env create -f environment.yml
 
 ```
 
-Salmon mapping was performed under the conda environment named **salmon** activated with following commend. 
+Salmon mapping was performed under the conda environment **salmon** activated with following commend. 
 
 
 ```bash
