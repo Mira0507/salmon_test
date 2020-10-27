@@ -1,5 +1,5 @@
-### 1. Setting Conda Environment    
-I created and used a simple conda environment. Check out docs below for more info:   
+### 1. Setting a conda environment    
+I wrote and used a simple conda environment introduced below. Check out related docs for more info:   
 
 - **Conda**: https://docs.conda.io/projects/conda/en/latest/user-guide/tasks/manage-environments.html
 - **Salmon**: https://salmon.readthedocs.io/en/latest/
@@ -45,5 +45,44 @@ conda activate salmon
 
 ```
 
+### 2. Writing a bash file running salmon 
+
+
+
+Flags:   
+- **salmon quant** run salmon
+- **-i** path to indexing files 
+- **-l A** library type A 
+- **-r** for single-end reads 
+- **-p** number of threads (8-12)
+- **--validateMapping** selective alignment to the transcriptome 
+- **-o** path to output files 
+
+
+Note:
+- 6 Raw .fastq.gz files are in ./rawdata 
+- Indexing files were obtained from refgenie (http://refgenomes.databio.org/, hg19 asset name:tag=salmon_sa_index:default). Check out salmon docs if you would like to build your own indexing files. 
+ 
+
+
+
+```bash
+
+
+#!/bin/bash
+
+cd rawdata # move to a directory where raw .fastq.gz files locate (there are no other files in it)
+
+# path for index files: "../salmon_sa_index_hg19"
+# path for output files: "../<sample_name>.salmon_quant/quant.sf"
+
+for read in $(ls) 
+do
+    salmon quant -i ../salmon_sa_index_hg19 -l A -r $read -p 8 --validateMappings -o ../${read}.salmon_quant
+done
+
+cd ..
+
+```
 
 
