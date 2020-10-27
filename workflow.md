@@ -62,7 +62,7 @@ Flags:
 Note:
 - 6 Raw .fastq.gz files are in ./rawdata 
 - Indexing files were obtained from refgenie (http://refgenomes.databio.org/, hg19 asset name:tag=salmon_sa_index:default). Check out salmon docs if you would like to build your own indexing files. 
-- Check out Salmon docs to other flags for changing options (e.g. paired-reads, etc)
+- Check out Salmon docs for other flags when changing options (e.g. paired-reads, etc)
 
 
 
