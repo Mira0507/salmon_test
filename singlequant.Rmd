@@ -25,6 +25,7 @@ library(pheatmap)
 ```
 
 ## Setting AnnotationHub
+## Assign your species of interest
 
 ```{r annotationhub_setup}
 
@@ -34,7 +35,7 @@ ah <- AnnotationHub(hub=getAnnotationHubOption("URL"))   # Bring annotation DB
 
 ```
 
-## Running AnnotationHub Depending on Output of Interest
+## Running AnnotationHub 
 
 ```{r run_annotationhub}
 
@@ -68,7 +69,7 @@ AnnoDb <- select(AnnoDb,
 ```
 
 
-## Checking AnnotationHub Output 
+## Checking out the AnnotationHub output 
 
 ```{r checking_annotationhub_output}
 
@@ -78,7 +79,7 @@ head(AnnoDb)
 
 ```
 
-## Defining File Name and Path for .sf Files
+## Defining file name and path for .sf files
 ### .sf files have been created from fastq data by salmon
 
 
@@ -132,7 +133,7 @@ rownames(metadata) <- SampleNames
 print(metadata)
 ```
 
-## Extracting TPM Data from .sf files 
+## Extracting TPM data from .sf files 
 
 
 ```{r saving_tpm_to_dataframe}
@@ -163,7 +164,7 @@ TPMTable <- data.frame(Transcript=AnnoDb$ENSEMBLTRANS,
 colnames(TPMTable)[3:ncol(TPMTable)] <- SampleNames
 ```
 
-## Data Trimming (NA and zero-TPM transcripts)
+## Data trimming (NA and zero-TPM transcripts)
 
 
 ```{r treaming_TPMTable}
@@ -179,7 +180,7 @@ TPMTable <- TPMTable[nonzeroTPM,]
 
 ```
 
-## Exploring Cleaned TPM Data
+## Exploring Cleaned TPM data
 ### Saving as a csv file
 
 
@@ -194,7 +195,7 @@ summary(TPMTable)
 write.csv(TPMTable, "Read_TPM.csv")
 ```
 
-## Plotting Library Size per Sample
+## Plotting library size per sample
 
 
 ```{r library_size}
@@ -233,7 +234,7 @@ ImageSave_fn(LibSizePlot, "/LibSizePlot.jpg")
 
 ```
 
-## Plotting Distribution of TPM per Sample
+## Plotting distribution of TPM per sample
 
 
 ```{r distribution_of_transcripts}
@@ -270,8 +271,8 @@ ImageSave_fn(TranscriptDistPlot,
 
 ```
 
-## Cleaning TPM Data for DESeq
-### Converting Raw TPM to an integer matrix
+## Cleaning TPM data prior to DE analysis
+### Converting the raw TPM to an integer matrix
 
 
 ```{r deseq_datacleaning}
@@ -323,7 +324,7 @@ vsd <- varianceStabilizingTransformation(dds,
 
 ```
 
-## Estimating Size Factors, Dispersions, and Conducting Wald Test
+## Estimating size factors, dispersions, and conducting the Wald Test
 
 
 ```{r sizefactors}
