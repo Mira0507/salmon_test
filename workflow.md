@@ -66,12 +66,12 @@ Note:
 
 
 
-```bash
+```singlequant.bash
 
 
 #!/bin/bash
 
-cd rawdata # move to a directory where raw .fastq.gz files locate (there are no other files in it)
+cd rawdata # move to the directory where raw .fastq.gz files locate (there are no other files in it)
 
 # path for index files: "../salmon_sa_index_hg19"
 # path for output files: "../<sample_name>.salmon_quant/quant.sf"
@@ -81,7 +81,17 @@ do
     salmon quant -i ../salmon_sa_index_hg19 -l A -r $read -p 8 --validateMappings -o ../${read}.salmon_quant
 done
 
-cd ..
+cd ..   # move to the upper directory
+
+```
+
+### 3. Running Salmon by executing the bash commend
+
+
+```terminal
+
+bash singlequant.bash
+
 
 ```
 
