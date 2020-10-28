@@ -87,6 +87,8 @@ cd ..   # move to the upper directory
 
 ### 3. Running Salmon by executing the bash commend
 
+Output quant.sf files are saved in ./<sample_name>.salmon_quant
+
 
 ```terminal
 
@@ -95,4 +97,134 @@ bash singlequant.bash
 
 ```
 
+
+### 4. Extracting transcript read counts from the quant.sf files with R tximport package
+- Below is R code extracting transcript read counts from the quant.sf files and saving as Read_TPM.csv file in ./csv directory. 
+- Change sample names when running your samples
+
+```r
+
+# Loading required packages 
+library(AnnotationHub)
+library(tximport)
+library(tidyverse)
+
+
+# AnnotationHub Setup 
+AnnotationSpecies <- "Homo sapiens"  # Assign your species 
+MyCache <- "../rawdata/AnnoCache"
+ah <- AnnotationHub(hub=getAnnotationHubOption("URL"))   # Bring annotation DB
+
+
+# Running AnnotationHub
+ahQuery <- query(ah, c("OrgDb", AnnotationSpecies))      # Filter annotation of interest
+
+if (length(ahQuery) == 1) {
+    DBName <- names(ahQuery)
+} else if (length(ahQuery) > 1) {
+               DBName <- names(ahQuery)[1]
+} else {
+    print("You don't have a valid DB")
+    rmarkdown::render() 
+} 
+
+AnnoDb <- ah[[DBName]] # Store into an OrgDb object  
+
+
+# Explore your OrgDb object with following accessors:
+# columns(AnnpDb)
+# keytypes(AnnoDb)
+# keys(AnnoDb, keytype=..)
+# select(AnnoDb, keys=.., columns=.., keytype=...)
+AnnoKey <- keys(AnnoDb, keytype="ENSEMBLTRANS")
+
+# Note: Annotation has to be done with transcripts instead of genome
+AnnoDb <- select(AnnoDb, 
+                 AnnoKey,
+                 keytype="ENSEMBLTRANS",
+                 columns="SYMBOL")
+
+
+# Check if your AnnoDb has been extracted and saved correctely
+class(AnnoDb)
+head(AnnoDb)
+
+
+# Define sample names 
+SampleNames <-  c("Mock_72hpi_S1",
+                 "Mock_72hpi_S2",
+                 "Mock_72hpi_S3",
+                 "SARS-CoV-2_72hpi_S7",
+                 "SARS-CoV-2_72hpi_S8",
+                 "SARS-CoV-2_72hpi_S9") 
+
+# Define group level
+GroupLevel <- c("Mock", "COVID")
+
+
+# Create a directory to save csv files
+dir.create("./csv")
+
+
+
+# Define .sf file path
+sf <- c(paste0("./", 
+               SampleNames,
+               ".fastq.gz.salmon_quant/quant.sf"))
+
+# Define sample groups
+group <- c(rep("Mock", 3), rep("COVID", 3))
+
+# Create metadata
+metadata <- data.frame(Sample=factor(SampleNames, levels=SampleNames),
+                       Group=factor(group, levels=GroupLevel),
+                       Path=sf)
+
+rownames(metadata) <- SampleNames
+
+# Create a tpm data frame with annotation
+TPMTable <- data.frame(Transcript=AnnoDb$ENSEMBLTRANS,
+    Gene=AnnoDb$SYMBOL)
+
+# Extract TPM and combine to the TPMTable data frame
+ for (x in sf) {
+        
+        txi <- tximport(x,            # path for a quant.sf file  
+                        type="salmon",     
+                        tx2gene=AnnoDb,txOut=TRUE)
+
+        tpm <- as.data.frame(txi$abundance) 
+         
+        tpm <- rownames_to_column(tpm, var = colnames(TPMTable)[1]) 
+
+        TPMTable <- full_join(TPMTable, 
+                              tpm, 
+                              by=colnames(TPMTable)[1])
+
+ }
+
+
+# Assign column names to sample names 
+colnames(TPMTable)[3:ncol(TPMTable)] <- SampleNames
+
+
+
+# Remove NA-containing transcripts
+TPMTable <- TPMTable[complete.cases(TPMTable),]
+
+
+# Remove zero-TPM transcripts 
+nonzeroTPM <- rowSums(TPMTable[3:ncol(TPMTable)]) > 0
+TPMTable <- TPMTable[nonzeroTPM,]
+
+
+# Exploratory data analysis
+dim(TPMTable)
+head(TPMTable)
+summary(TPMTable)
+
+# Save the raw tpm table as a csv file
+write.csv(TPMTable, "./csv/Read_TPM.csv")
+
+```
 
