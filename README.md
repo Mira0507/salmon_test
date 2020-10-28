@@ -13,4 +13,4 @@ A bash file executing salmon transcription mapping (with decoy) returning .sf fi
 R code for extracting count data from .sf files and performing downstream DE analysis
 
 **4. workflow.md**   
-Entire workflow from the raw data to the downstream analysis
+Entire workflow from raw data to downstream analysis
