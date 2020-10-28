@@ -1,4 +1,4 @@
-## This repo is created to store an example workflow for salmon-mediated mapping and downstream analysis 
+## This repo is intended to store an example workflow for salmon-mediated mapping and downstream analysis 
 
 
 ### File Description 
