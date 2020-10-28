@@ -12,5 +12,5 @@ A bash file executing salmon transcription mapping (with decoy) returning .sf fi
 **3. singlequant.Rmd**    
 R code for extracting count data from .sf files and performing downstream DE analysis
 
-**4. README.md**   
+**4. workflow.md**   
 Entire workflow from the raw data to the downstream analysis
