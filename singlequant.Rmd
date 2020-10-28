@@ -105,6 +105,10 @@ Contrast <- c("Group", "COVID", "Mock")
 PlotPath <- "./plotting"
 dir.create(PlotPath)
 
+# Set a directory to save csv files
+dir.create("./csv")
+
+
 # Define a function to save image files
 ImageSave_fn <- function(ImageObject, Name) {
     jpeg(file=(paste0(PlotPath, Name)))
@@ -192,7 +196,7 @@ head(TPMTable)
 summary(TPMTable)
 
 # Save the raw tpm table as a csv file
-write.csv(TPMTable, "Read_TPM.csv")
+write.csv(TPMTable, "./csv/Read_TPM.csv")
 ```
 
 ## Plotting library size per sample
@@ -436,10 +440,18 @@ dds <- DESeq(dds)
 
 # Check result names 
 ResNames <- resultsNames(dds)
-
+print(ResNames)
 
 ```
 
+## Creating a dispersion plot
+
+```{r dispersion_plot}
+
+plotDispEsts(dds)
+
+
+```
 
 ## Setting how to extract fold-change results
 ### Change variables below
@@ -460,7 +472,10 @@ LFCTable_fn <- function(df) {
 
     df <- df %>% 
         rownames_to_column(var="Annotation") %>%
-        separate("Annotation", c("Transcript", "Gene"))
+        separate("Annotation", c("Transcript", "Gene")) %>%
+        mutate(Significance=ifelse(padj < 0.1 & !is.na(padj), 
+                                   "Significant", 
+                                   "Non-significant")) 
 
     return(df)
 }
@@ -482,6 +497,13 @@ LFCTable_fn <- function(df) {
 # alpha: FDR threshold
 Res <- results(dds, contrast=Contrast, alpha=alpha)
 
+# Convert the LFC data to a data frame
+ResDF <- LFCTable_fn(as.data.frame(Res))
+
+
+# Save the LFC data 
+write.csv(ResDF, "./csv/LFC_noshrinkage.csv")
+
 # Extracttion without shrinkage in a list 
 # name has to be determined in the previous chunk
 resList <- list()
@@ -502,17 +524,21 @@ for (i in 1:length(Coef)) {
 ### Checkout resList in the previous chunk and save it to a data frame 
 
 
-```{r}
+```{r LFC_to_dataframe}
 
 # Save data of interest as a data frame for further analysis 
 shRes <- as.data.frame(resList[[1]])
 
-# Row names to columns (Transcripts, Gene)
+# Clean the LFC table 
 shRes <- LFCTable_fn(shRes)
+
+# Save the LFC table
+write.csv(shRes, "./csv/LFC_shrinkage.csv")
 
 head(shRes)
 ```
 
+## Exploring distribution of false discovery rate (FDR)
 
 ```{r FDR_distribution}
 
@@ -539,6 +565,89 @@ ImageSave_fn(FDR_distPlot,
 
 
 
+```{r FDR_statistics}
+
+FDR_stat <- data.frame(NumOfTx=nrow(shRes),
+                       NumOfSigTx=sum(shRes$Significance == "Significant"),
+                       NumOfNAFDR=sum(is.na(shRes$padj)), 
+                       PropOfSigTx=sum(shRes$Significance == "Significant") / nrow(shRes))
+
+
+head(shRes[shRes$Significance == "Significant",])
+```
+
+
+
+```{r L2FC_distribution}
+
+# Subset transcripts whose padj are not NA
+shRes_nonNa <- subset(shRes, !is.na(padj))
+
+
+L2FC_dist <- 
+    ggplot(shRes_nonNa,
+           aes(x=log2FoldChange)) + 
+geom_density(color="black") + 
+geom_density(data=shRes_nonNa,
+             aes(x=log2FoldChange,
+                 color=Significance)) +
+theme_bw() +
+ggtitle("Distribution of Fold Change Values") + 
+ylab("Density")
+
+print(L2FC_dist)
+
+```
+
+
+
+## Exploring mean-difference with an MA plot
+
+
+```{r MAplot}
+
+
+# Define a function creating an MA plot
+MA_fn <- function(df, tit) {
+
+    ggplot(df, 
+           aes(x=baseMean,
+               y=log2FoldChange,
+               color=Significance)) +
+geom_point()+ 
+scale_x_log10() + 
+theme_bw() + 
+scale_color_manual(values=c("grey", "blue")) + 
+ggtitle(tit)
+}
+
+
+# Create MA plots with or without shrinkage
+MAplot_noshr <- MA_fn(ResDF, "Mean-Differene without shrinkage")
+MAplot_shr <- MA_fn(shRes, "Mean-Difference with shrinkage")
+
+# Print the plots
+print(MAplot_noshr)
+print(MAplot_shr)
+
+```
+
+## Volcano plot
+
+```{r volcano_plot}
+
+
+ggplot(shRes, 
+       aes(x=log2FoldChange,
+           y= -log10(padj),
+           color=Significance)) + 
+geom_point() +
+theme_bw() +
+scale_color_manual(values=c("grey", "blue")) + 
+ggtitle("Volcano Plot") + 
+ylab("-log10(FDR)")
+
+```
 
 
 ## Session Info 
