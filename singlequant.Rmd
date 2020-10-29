@@ -429,6 +429,22 @@ pheatmap(EigenValues,
 ```
 
 
+## Sample QC: Sample Correlation Heatmap
+
+
+```{r QC_correlation_heatmap}
+
+# Extract a normalized count matrix
+vsdMatrix <- assay(vsd)
+
+corMatrix <- cor(vsdMatrix)
+
+pheatmap(corMatrix,
+         annotation=HeatmapAnno,
+         main="Sample Correlation Heatmap")
+
+```
+
 ## Running DE analysis
 
 
@@ -473,9 +489,9 @@ LFCTable_fn <- function(df) {
     df <- df %>% 
         rownames_to_column(var="Annotation") %>%
         separate("Annotation", c("Transcript", "Gene")) %>%
-        mutate(Significance=ifelse(padj < 0.1 & !is.na(padj), 
-                                   "Significant", 
-                                   "Non-significant")) 
+        mutate(FDR=ifelse(padj < 0.1 & !is.na(padj), 
+                                   "< 0.1", 
+                                   "> 0.1")) 
 
     return(df)
 }
@@ -550,7 +566,8 @@ geom_density() +
 theme_bw() +
 ggtitle("Distribution of False Discovery Rate (FDR)") + 
 xlab("Adjusted P-Value") + 
-ylab("Density") 
+ylab("Density") + 
+geom_vline(xintercept=alpha, color="red")
 
 # Print the plot
 print(FDR_distPlot)
@@ -563,19 +580,28 @@ ImageSave_fn(FDR_distPlot,
 
 ```
 
+## Exploring FDR statistics
+
+### - NumOfTx: total number of transcripts
+### - BelowAlpha: number of transcripts whose FDR is below 0.1
+### - NumofNAInFDR: number of transcripts whose FDR is NA
+### - PropOfAboveAlpha: BelowAlpha/NumOfTx 
 
 
 ```{r FDR_statistics}
 
 FDR_stat <- data.frame(NumOfTx=nrow(shRes),
-                       NumOfSigTx=sum(shRes$Significance == "Significant"),
-                       NumOfNAFDR=sum(is.na(shRes$padj)), 
-                       PropOfSigTx=sum(shRes$Significance == "Significant") / nrow(shRes))
+                       BelowAlpha=sum(shRes$FDR == "< 0.1"),
+                       NumOfNAInFDR=sum(is.na(shRes$padj)), 
+                       PropOfAboveAlpha=sum(shRes$FDR == "< 0.1") / nrow(shRes))
 
-
-head(shRes[shRes$Significance == "Significant",])
+head(FDR_stat)
 ```
 
+## Exploring distribution of log2FoldChange
+
+### Black: total transcripts (padj =/= NA)
+### Colored: transcripts above or below FDR=0.1
 
 
 ```{r L2FC_distribution}
@@ -590,7 +616,7 @@ L2FC_dist <-
 geom_density(color="black") + 
 geom_density(data=shRes_nonNa,
              aes(x=log2FoldChange,
-                 color=Significance)) +
+                 color=FDR)) +
 theme_bw() +
 ggtitle("Distribution of Fold Change Values") + 
 ylab("Density")
@@ -613,11 +639,11 @@ MA_fn <- function(df, tit) {
     ggplot(df, 
            aes(x=baseMean,
                y=log2FoldChange,
-               color=Significance)) +
+               color=FDR)) +
 geom_point()+ 
 scale_x_log10() + 
 theme_bw() + 
-scale_color_manual(values=c("grey", "blue")) + 
+scale_color_manual(values=c("blue", "grey")) + 
 ggtitle(tit)
 }
 
@@ -640,14 +666,59 @@ print(MAplot_shr)
 ggplot(shRes, 
        aes(x=log2FoldChange,
            y= -log10(padj),
-           color=Significance)) + 
+           color=FDR)) + 
 geom_point() +
 theme_bw() +
-scale_color_manual(values=c("grey", "blue")) + 
+scale_color_manual(values=c("blue", "grey")) + 
 ggtitle("Volcano Plot") + 
 ylab("-log10(FDR)")
 
 ```
+
+## Exploring transcription profiling (FDR < 0.1)
+
+
+```{r transcription_profiling_FDR}
+
+# Determine row numbers whose FDR is below alpha 
+RowBelowAlpha <- which(shRes$FDR == "< 0.1")
+
+# Subset normalized transcript counts with FDR below alpha 
+TranscriptsBelowAlpha <- assay(vsd)[RowBelowAlpha,]
+
+# Create a heatmap from TranscriptsBelowAlpha 
+pheatmap(TranscriptsBelowAlpha,
+         annotation=HeatmapAnno,
+         main="Transcription Profiles (FDR < 0.1)")
+
+```
+
+## Exploring transcription profiling 
+## (FDR < 0.1 & log2FoldChange >= 1)
+
+
+```{r transciption_profiling_FDRandFold}
+
+# Set minimum log2FoldChange of your interest: MinL2F
+MinL2F <- 1
+
+# Determine row numbers whose log2FoldChange >= MinL2F
+AboveMinL2F <- which(shRes$FDR == "< 0.1" &
+                      shRes$log2FoldChange >= MinL2F)
+
+
+# Subset normalized transcript counts with log2FoldChange above MinL2F 
+TranscriptsAboveMinL2F <- assay(vsd)[AboveMinL2F,]
+
+
+pheatmap(TranscriptsAboveMinL2F,
+         annotation=HeatmapAnno,
+         main="Transcription Profiles (FDR < 0.1 and log2FoldChange >= 1)",fontsize_row=5)
+
+length(AboveMinL2F)
+
+```
+
 
 
 ## Session Info 
