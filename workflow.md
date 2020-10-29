@@ -57,7 +57,8 @@ Flags:
 - **-p** number of threads (8-12)
 - **--validateMapping** selective alignment to the transcriptome 
 - **-o** path to output files 
-
+- **--seqBias** enable it to learn and correct for sequence-specific biases in the input data
+- **--gcBias** enable it to learn and correct for fragment-level GC biases in the input data
 
 Note:
 - 6 Raw .fastq.gz files are in ./rawdata 
@@ -68,20 +69,17 @@ Note:
 
 ```singlequant.bash
 
-
 #!/bin/bash
 
-cd rawdata # move to the directory where raw .fastq.gz files locate (there are no other files in it)
-
-# path for index files: "../salmon_sa_index_hg19"
-# path for output files: "../<sample_name>.salmon_quant/quant.sf"
+cd rawdata
 
 for read in $(ls) 
 do
-    salmon quant -i ../salmon_sa_index_hg19 -l A -r $read -p 8 --validateMappings -o ../${read}.salmon_quant
+    salmon quant -i ../salmon_sa_index_hg19 -l A --gcBias --seqBias -r $read -p 8 --validateMappings -o ../${read}.salmon_quant
 done
 
-cd ..   # move to the upper directory
+cd ..
+
 
 ```
 
