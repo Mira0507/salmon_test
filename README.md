@@ -14,3 +14,6 @@ R code for extracting count data from .sf files and performing downstream DE ana
 
 **4. workflow.md**   
 Entire workflow from raw data to downstream analysis
+
+**5. singlequant.html**   
+Rendered output file from singlequant.Rmd 
