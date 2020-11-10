@@ -12,7 +12,7 @@ A bash file executing salmon transcription mapping (with decoy) returning .sf fi
 **3. singlequant_gene.Rmd**    
 R code for extracting count data (gene level) from .sf files and performing downstream DE analysis
 
-**4. singlequant_gene.html**
+**4. singlequant_gene.html**   
 An html file rendered from singlequant_gene.Rmd 
 
 **5. singlequant_transcript.Rmd**    
