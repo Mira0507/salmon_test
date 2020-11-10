@@ -18,7 +18,7 @@ An html file rendered from singlequant_gene.Rmd
 **5. singlequant_transcript.Rmd**    
 R code for extracting count data (transcript level) from .sf files and performing downstream DE analysis
 
-**6. singlequant_transcript.html**
+**6. singlequant_transcript.html**   
 An html file rendered from singlequant_transcript.Rmd 
 
 **7. workflow.md**   
