@@ -6,6 +6,7 @@ I wrote and used a simple conda environment introduced below. Check out related 
 - **R**: https://cran.r-project.org/
 - **AnnotationHub**: https://bioconductor.org/packages/devel/bioc/vignettes/AnnotationHub/inst/doc/AnnotationHub.html 
 - **DESeq2**: http://bioconductor.org/packages/devel/bioc/vignettes/DESeq2/inst/doc/DESeq2.html 
+- **tximport**: https://bioconductor.org/packages/devel/bioc/vignettes/tximport/inst/doc/tximport.html
 
 ```environment.yml
 name: salmon
