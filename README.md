@@ -1,4 +1,4 @@
-## This repo is intended to store an example workflow for salmon-mediated mapping and downstream analysis 
+## Salmon mapping (with decoy) test run  
 
 
 ### File Description 
