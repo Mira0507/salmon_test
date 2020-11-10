@@ -165,7 +165,7 @@ ReadTable <- ReadTable[complete.cases(ReadTable),]
 
 
 # Remove zero-Read transcripts 
-nonzeroRead <- rowSums(ReadTable[3:ncol(ReadTable)]) > 0
+nonzeroRead <- rowSums(ReadTable[2:ncol(ReadTable)]) > 0
 ReadTable <- ReadTable[nonzeroRead,]
 
 
