@@ -19,7 +19,7 @@ An html file rendered from singlequant_tpm.Rmd
 R code for extracting counts from .sf files and performing downstream DE analysis
 
 **6. singlequant_counts.html**   
-An html file rendered from singlequant_transcript.Rmd 
+An html file rendered from singlequant_counts.Rmd 
 
 **7. workflow.md**   
 Entire workflow from raw data to downstream analysis
