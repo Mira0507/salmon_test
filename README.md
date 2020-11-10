@@ -9,16 +9,16 @@ Link to raw data source [GSE 157852](https://www.ncbi.nlm.nih.gov/geo/query/acc.
 **2. singlequant.sh**    
 A bash file executing salmon transcription mapping (with decoy) returning .sf files 
 
-**3. singlequant_gene.Rmd**    
-R code for extracting count data (gene level) from .sf files and performing downstream DE analysis
+**3. singlequant_tpm.Rmd**    
+R code for extracting TPM from .sf files and performing downstream DE analysis
 
-**4. singlequant_gene.html**   
-An html file rendered from singlequant_gene.Rmd 
+**4. singlequant_tpm.html**   
+An html file rendered from singlequant_tpm.Rmd 
 
-**5. singlequant_transcript.Rmd**    
-R code for extracting count data (transcript level) from .sf files and performing downstream DE analysis
+**5. singlequant_counts.Rmd**    
+R code for extracting counts from .sf files and performing downstream DE analysis
 
-**6. singlequant_transcript.html**   
+**6. singlequant_counts.html**   
 An html file rendered from singlequant_transcript.Rmd 
 
 **7. workflow.md**   
