@@ -192,7 +192,7 @@ write.csv(ReadTable, "./csv/Read_counts.csv")
 ```{r library_size}
 
 # Create a library size table
-LibSizeTable <- colSums(ReadTable[3:ncol(ReadTable)], 
+LibSizeTable <- colSums(ReadTable[2:ncol(ReadTable)], 
                         na.rm=TRUE) 
 
 # Data Cleaning
@@ -323,9 +323,6 @@ ylab("Size Factor")
 # Print the plot 
 print(SizeFactorPlot)
 
-# Save the plot
-ImageSave_fn(SizeFactorPlot, 
-             "/SizeFactorPlot.jpg")
 
 # Extract sizefactor-normalized counts
 normCounts <- counts(dds, normalized=TRUE)
