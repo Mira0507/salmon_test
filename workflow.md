@@ -214,7 +214,7 @@ ReadTable <- ReadTable[complete.cases(ReadTable),]
 
 
 # Remove zero-Read transcripts 
-nonzeroRead <- rowSums(ReadTable[3:ncol(ReadTable)]) > 0
+nonzeroRead <- rowSums(ReadTable[2:ncol(ReadTable)]) > 0
 ReadTable <- ReadTable[nonzeroRead,]
 
 # Exploratory data analysis
@@ -228,23 +228,24 @@ write.csv(ReadTable, "./csv/Read_counts.csv")
 
 ```
 
-- Transcript level: **singlequant_transcript.Rmd** 
+- Transcript level: **singlequant_transcript.Rmd** -> **csv/TPM_count.csv**
 
 ```r
-
-# Loading required packages 
+# Loading required packages
+library(data.table)
+library(rmarkdown)
 library(AnnotationHub)
-library(tximport)
 library(tidyverse)
-
+library(tximport)
+library(ggplot2)
+library(DESeq2)
+library(pheatmap)
 
 # AnnotationHub Setup 
 AnnotationSpecies <- "Homo sapiens"  # Assign your species 
-MyCache <- "../rawdata/AnnoCache"
 ah <- AnnotationHub(hub=getAnnotationHubOption("URL"))   # Bring annotation DB
 
 
-# Running AnnotationHub
 ahQuery <- query(ah, c("OrgDb", AnnotationSpecies))      # Filter annotation of interest
 
 if (length(ahQuery) == 1) {
@@ -266,7 +267,7 @@ AnnoDb <- ah[[DBName]] # Store into an OrgDb object
 # select(AnnoDb, keys=.., columns=.., keytype=...)
 AnnoKey <- keys(AnnoDb, keytype="ENSEMBLTRANS")
 
-# Note: Annotation has to be done with transcripts instead of genome
+# Note: Annotation has to be done with not genome but transcripts 
 AnnoDb <- select(AnnoDb, 
                  AnnoKey,
                  keytype="ENSEMBLTRANS",
@@ -276,7 +277,6 @@ AnnoDb <- select(AnnoDb,
 # Check if your AnnoDb has been extracted and saved correctely
 class(AnnoDb)
 head(AnnoDb)
-
 
 # Define sample names 
 SampleNames <-  c("Mock_72hpi_S1",
@@ -289,15 +289,16 @@ SampleNames <-  c("Mock_72hpi_S1",
 # Define group level
 GroupLevel <- c("Mock", "COVID")
 
+# Define contrast for DE analysis
+Contrast <- c("Group", "COVID", "Mock")
 
-# Create a directory to save csv files
+
+# Set a directory to save csv files
 dir.create("./csv")
 
 
-
 # Define .sf file path
-sf <- c(paste0("./", 
-               SampleNames,
+sf <- c(paste0(SampleNames,
                ".fastq.gz.salmon_quant/quant.sf"))
 
 # Define sample groups
@@ -310,7 +311,10 @@ metadata <- data.frame(Sample=factor(SampleNames, levels=SampleNames),
 
 rownames(metadata) <- SampleNames
 
-# Create a tpm data frame with annotation
+# Explore the metadata
+print(metadata)
+
+
 TPMTable <- data.frame(Transcript=AnnoDb$ENSEMBLTRANS,
     Gene=AnnoDb$SYMBOL)
 
@@ -336,7 +340,6 @@ TPMTable <- data.frame(Transcript=AnnoDb$ENSEMBLTRANS,
 colnames(TPMTable)[3:ncol(TPMTable)] <- SampleNames
 
 
-
 # Remove NA-containing transcripts
 TPMTable <- TPMTable[complete.cases(TPMTable),]
 
@@ -345,7 +348,6 @@ TPMTable <- TPMTable[complete.cases(TPMTable),]
 nonzeroTPM <- rowSums(TPMTable[3:ncol(TPMTable)]) > 0
 TPMTable <- TPMTable[nonzeroTPM,]
 
-
 # Exploratory data analysis
 dim(TPMTable)
 head(TPMTable)
@@ -353,6 +355,5 @@ summary(TPMTable)
 
 # Save the raw tpm table as a csv file
 write.csv(TPMTable, "./csv/Read_TPM.csv")
-
 ```
 
