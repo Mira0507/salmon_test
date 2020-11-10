@@ -98,7 +98,7 @@ bash singlequant.bash
 
 ### 4. Extracting gene/transcript read counts from the quant.sf files with R tximport package
 
-- Gene level: **singlequant_gene.Rmd** -> **csv/Read_count.csv**
+- count level: **singlequant_counts.Rmd** -> **csv/Read_count.csv**
 
 ```{r}
 
@@ -228,7 +228,7 @@ write.csv(ReadTable, "./csv/Read_counts.csv")
 
 ```
 
-- Transcript level: **singlequant_transcript.Rmd** -> **csv/TPM_count.csv**
+- TPM level: **singlequant_tpm.Rmd** -> **csv/TPM_count.csv**
 
 ```r
 # Loading required packages
@@ -323,21 +323,21 @@ TPMTable <- data.frame(Transcript=AnnoDb$ENSEMBLTRANS,
         
         txi <- tximport(x,            # path for a quant.sf file  
                         type="salmon",     
-                        tx2gene=AnnoDb,txOut=TRUE)
-
-        tpm <- as.data.frame(txi$abundance) 
+                        tx2gene=AnnoDb,txOut=TRUE) 
+        txi.sum <- summarizeToGene(txi, AnnoDb)
+        tpm <- as.data.frame(txi.sum$abundance) 
          
         tpm <- rownames_to_column(tpm, var = colnames(TPMTable)[1]) 
-
         TPMTable <- full_join(TPMTable, 
                               tpm, 
-                              by=colnames(TPMTable)[1])
-
+                              by=colnames(TPMTable)[1]) %>% 
+        distinct()
  }
 
 
+
 # Assign column names to sample names 
-colnames(TPMTable)[3:ncol(TPMTable)] <- SampleNames
+colnames(TPMTable)[2:ncol(TPMTable)] <- SampleNames
 
 
 # Remove NA-containing transcripts
@@ -345,7 +345,7 @@ TPMTable <- TPMTable[complete.cases(TPMTable),]
 
 
 # Remove zero-TPM transcripts 
-nonzeroTPM <- rowSums(TPMTable[3:ncol(TPMTable)]) > 0
+nonzeroTPM <- rowSums(TPMTable[2:ncol(TPMTable)]) > 0
 TPMTable <- TPMTable[nonzeroTPM,]
 
 # Exploratory data analysis
