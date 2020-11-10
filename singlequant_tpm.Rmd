@@ -163,7 +163,7 @@ TPMTable <- TPMTable[complete.cases(TPMTable),]
 
 
 # Remove zero-TPM transcripts 
-nonzeroTPM <- rowSums(TPMTable[3:ncol(TPMTable)]) > 0
+nonzeroTPM <- rowSums(TPMTable[2:ncol(TPMTable)]) > 0
 TPMTable <- TPMTable[nonzeroTPM,]
 
 
