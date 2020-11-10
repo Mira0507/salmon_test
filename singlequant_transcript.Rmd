@@ -30,7 +30,6 @@ library(pheatmap)
 ```{r annotationhub_setup}
 
 AnnotationSpecies <- "Homo sapiens"  # Assign your species 
-MyCache <- "../rawdata/AnnoCache"
 ah <- AnnotationHub(hub=getAnnotationHubOption("URL"))   # Bring annotation DB
 
 ```
@@ -101,26 +100,12 @@ GroupLevel <- c("Mock", "COVID")
 # Define contrast for DE analysis
 Contrast <- c("Group", "COVID", "Mock")
 
-# Set a directory to save image files 
-PlotPath <- "./plotting"
-dir.create(PlotPath)
-
 # Set a directory to save csv files
 dir.create("./csv")
 
 
-# Define a function to save image files
-ImageSave_fn <- function(ImageObject, Name) {
-    jpeg(file=(paste0(PlotPath, Name)))
-    ImageObject
-    dev.off()
-}
-
-
-
 # Define .sf file path
-sf <- c(paste0("./", 
-               SampleNames,
+sf <- c(paste0(SampleNames,
                ".fastq.gz.salmon_quant/quant.sf"))
 
 # Define sample groups
@@ -233,8 +218,6 @@ LibSizePlot <-
 # Print the plot
 print(LibSizePlot)
 
-# Save the plot
-ImageSave_fn(LibSizePlot, "/LibSizePlot.jpg")
 
 ```
 
@@ -267,10 +250,6 @@ TranscriptDistPlot <-
 # Print the plot       
 print(TranscriptDistPlot)
 
-
-# Save the plot
-ImageSave_fn(TranscriptDistPlot, 
-             "/TranscriptDistPlot.jpg")
 
 
 ```
@@ -361,9 +340,6 @@ ylab("Size Factor")
 # Print the plot 
 print(SizeFactorPlot)
 
-# Save the plot
-ImageSave_fn(SizeFactorPlot, 
-             "/SizeFactorPlot.jpg")
 
 # Extract sizefactor-normalized counts
 normCounts <- counts(dds, normalized=TRUE)
@@ -402,9 +378,6 @@ ggtitle("PCA")
 # Print the plot
 print(QCPCAPlot)
 
-# Save the plot
-ImageSave_fn(QCPCAPlot, 
-             "/QCPCAPlot.jpg")
 
 ```
 
@@ -571,11 +544,6 @@ geom_vline(xintercept=alpha, color="red")
 
 # Print the plot
 print(FDR_distPlot)
-
-# Save the plot
-ImageSave_fn(FDR_distPlot, 
-             "/FDR_distPlot.jpg")
-
 
 
 ```
