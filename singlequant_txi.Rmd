@@ -25,7 +25,8 @@ library(pheatmap)
 ```
 
 ## Setting AnnotationHub
-## Assign your species of interest
+
+Assign your species of interest
 
 ```{r annotationhub_setup}
 
@@ -79,7 +80,8 @@ head(AnnoDb)
 ```
 
 ## Defining file name and path for .sf files
-### .sf files have been created from fastq data by salmon
+
+.sf files have been created from fastq data by salmon
 
 
 ```{r preparing_importing.sf}
@@ -126,6 +128,17 @@ print(metadata)
 
 ## Converting .sf files to txi list 
 
+- txi_tpm: stores **TPM** with the argument **"countsFromAbundance="lengthScaledTPM"**
+- txi_counts: stores **original counts** 
+- We could alternatively generate counts from abundances, using the argument **countsFromAbundance**, scaled to library size, **"scaledTPM"**, or additionally scaled using the average transcript length, averaged over samples and to library size, **"lengthScaledTPM"**. Using either of these approaches, the counts are not correlated with length, and so the length matrix should not be provided as an offset for downstream analysis packages. For more details on these approaches, see the article listed under citation("tximport").
+- If you don't want gene-level summarization, set below argument:
+  **txOut=TRUE**. 
+- Visit tximport doc: https://bioconductor.riken.jp/packages/3.4/bioc/vignettes/tximport/inst/doc/tximport.html
+
+
+### Discussion about TPM as an input of DESeq2    
+#### from [Bioinformatics Forum](https://www.biostars.org/p/411259/))    
+None of it is ideal. You should start from raw counts if possible. If not and TPM is the only thing you have then what does it matter, results will anyway be unreliable, so interpret them with care and try to validate the important genes with either experiments or published RNA-seq data in a similar setup. Gene length correction down-penalizes counts of long genes and by this reduces its power, this is (from what I understand) why it is not by default done in tools like edgeR or DESeq2. But as said, if TPM is what you have with no alternative, go and try the pipeline suggested at BioC and then see if you get anything out of it. Maybe you already have genes from which you know that they must / should change in your setup, and some that should not, so you can get an idea how robust the results are. You should also think about how drastic you expect changes to be. TPM cannot correct for library composition (see e.g. on Youtube the StatQuest videos on DESeq2 and edgeR library normalization to learn what this is and why it is important to correct for it), so if you expect major changes in the transcriptional landscape like mostly genes being upregulated or vice verse, your TPM counts might be skewed. Again, be careful with the results and try to confirm important genes that you want to build on.
 
 ```{r saving_reads_to_dataframe}
 
@@ -134,6 +147,7 @@ names(sf) <- SampleNames
 
 # Run tximport
 # tpm vs original counts
+# input sf: a factor of all .sf files' path
 txi_tpm <- tximport(sf, 
                     type="salmon",
                     tx2gene=AnnoDb,
@@ -164,18 +178,24 @@ dim(txi_counts$counts)
 
 ## Creating an DESeq object from txi and VST
 
+- Note: The tximport-to-DESeq2 approach uses estimated gene counts from the transcript abundance quantifiers, but not normalized counts.
+- The **txi input** was used to create a DESeq object (aka **dds**) with **DESeqDataSetFromTximport()** function 
+- **vst()** was run for variance stabilizing transformation instead of rlog which takes longer time with similar characteristics. 
+- The **vsd** object created by vst() is used for not DE analysis but QC. 
+- Visit DESeq2 doc: http://bioconductor.org/packages/release/bioc/vignettes/DESeq2/inst/doc/DESeq2.html
+
 
 ```{r creating_dds_vsd}
 
 # Set a function creating dds and vsd
 dds_vsd_fn <- function(txi) { 
 
-    # Create a DESeq object 
+    # Create a DESeq object (so-calledd dds) 
     des <- DESeqDataSetFromTximport(txi, 
                                     colData=metadata,
                                     design=~Group)
 
-    # Create a vsd object 
+    # Create a vsd object (so-called vsd) 
     ves <- vst(des, blind=T)
 
     # Output them as a list 
@@ -185,10 +205,44 @@ dds_vsd_fn <- function(txi) {
 TPM <- dds_vsd_fn(txi_tpm)
 Counts <- dds_vsd_fn(txi_counts)
 
+# Outputs
+# dds: TPM/Counts[[1]] or TPM/Counts[['dds']] 
+# vsd: TPM/Counts[[2]] or TPM/Counts[['vsd']]
+
 ```
+
+
+## Exploring created dds 
+
+```{r exploring_dds}
+
+# TPM 
+TPM[[1]]
+head(counts(TPM[[1]]))
+
+
+# Counts
+Counts[[1]]
+head(counts(Counts[[1]]))
+```
+
+## Exploring created vsd
+
+```{r exploring_vsd}
+
+# TPM
+TPM[[2]]
+
+
+# Counts
+Counts[[2]]
+```
+
 
 ## Estimating size factors, dispersions, and conducting the Wald Test
 
+- **Dispersion** is calculated as a **measure of variation** instead of variance as variance gets larger when gene expression gets higher. 
+- **Wald test** is the default setting of DESeq2 testing null hypothesis when you compare **two groups**. Use **Likelihood ratio test (LRT)** when you have compare **more than two groups**. 
 
 ```{r DESeq_prep}
 
@@ -207,108 +261,185 @@ DESeqPrep_fn <- function(List) {
 Counts <- DESeqPrep_fn(Counts) 
 TPM <- DESeqPrep_fn(TPM)
 
-####################################################################
 
-# Extract and save the size factors as a data frame
-sizeFactor <- as.data.frame(round(sizeFactors(dds), 3))
+```
+
+## Exploring size factors
+
+```{r exploring_sizefactors}
+
+
+sizeFactors(Counts[[1]])
+sizeFactors(TPM[[1]])
+
+# Size factors don't exist in the Counts dds!
+# Normalization factors are calculated in the Counts dds instead! 
+assays(Counts[[1]])
+assays(TPM[[1]])
+
+colData(Counts[[1]])
+colData(TPM[[1]])
+
+```
+
+## Plotting the size factors in TPM
+
+- The size factors are only available from TPM dds 
+
+
+```{r plotting_sizefactors}
+
+
+# Extract and save the size factors in a data frame
+sizeFactor <- as.data.frame(round(sizeFactors(TPM[[1]]), 3))
+
 colnames(sizeFactor) <- 'Size_Factor'
 sizeFactor <- sizeFactor %>%
     rownames_to_column(var="Sample") %>%
     inner_join(metadata[, 1:ncol(metadata)-1], by="Sample") 
 
 # Create a plot comparing the size factors by sample
-SizeFactorPlot <- 
-    ggplot(sizeFactor, aes(x=Sample, 
+ggplot(sizeFactor, aes(x=Sample, 
                        y=Size_Factor, 
                        fill=Group,
                        label=Size_Factor)) +
     geom_bar(stat="identity", width=0.8) +
     theme_bw() + 
-    ggtitle("Size Factors") +
+    ggtitle("Size Factors in TPM-DESeq") +
     geom_text(vjust=1.5) +
     theme(axis.text.x=element_text(angle=45, 
-                                   vjust=0.5)) + 
-ylab("Size Factor")
-
-# Print the plot 
-print(SizeFactorPlot)
+                                   vjust=0.5)) + ylab("Size Factor")
+    
 
 
-# Extract sizefactor-normalized counts
-normCounts <- counts(dds, normalized=TRUE)
-head(normCounts)
-
-# Calculate and add dispersions to the DEseq object
-dds <- estimateDispersions(dds)
-
-# Add wald test to the DESeq object
-dds <- nbinomWaldTest(dds)
 
 ```
 
 
+## Plotting nornalization factors in the Counts
 
-## Sample QC: Principal Component Analysis
+- DESeq2 performs an internal normalization where geometric mean is calculated for each gene across all samples. The counts for a gene in each sample is then divided by this mean. The median of these ratios in a sample is the size factor for that sample.
 
-```{r QC_PCA}
+
+```{r plotting_normalizationfactors}
+
+# Extract and save normalization factors in a data frame
+normf <- as.data.frame(normalizationFactors(Counts[[1]])) %>%
+    gather(Sample, Normalization_Factor) %>%
+    inner_join(metadata[, 1:2], by="Sample") 
+
+normf$Sample <- as.factor(normf$Sample, levels=SampleNames)
+normf$Group <- as.factor(normf$Group, levels=GroupLevel)
+
+
+ggplot(normf, 
+       aes(x=Sample, y=Normalization_Factor)) + 
+geom_jitter(alpha=0.5, aes(color=Group)) + 
+
+# Add a boxplot to provide statistics in each sample
+geom_boxplot(aes(x=Sample, y=Normalization_Factor), 
+             outlier.shape=NA) + 
+theme_bw() +
+ggtitle("Normalization Factors") +
+theme(axis.text.x=element_text(angle=45, 
+                               vjust=0.5)) + 
+ylab("Normalization Factor / Gene") +
+
+# Add a dashed horizontal line to indicate where normalization factor=1
+geom_hline(yintercept=1, 
+           color="blue", 
+           linetype="dashed")
+
+
+
+
+
+```
+
+
+## Setting functions for GC plots
+
+```{r QCplot_functions}
 
 # Assigne what to compare
 GroupOfInterest <- Contrast[1] 
 
-# Extract PCA eigenvalues 
-PCAMatrix <- plotPCA(vsd,
-        intgroup=GroupOfInterest,
-        returnData=TRUE)  
+# Set a function for a PCA plot
+QCPCA_fn <- function(inputList, Title) {
 
-# Create a PCA plot 
-QCPCAPlot<- 
-    plotPCA(vsd,
-        intgroup=GroupOfInterest,
-        returnData=FALSE) +
-theme_bw() +
-ggtitle("PCA")
+    plotPCA(inputList[[2]],
+            intgroup=GroupOfInterest) + theme_bw() + ggtitle(Title)
 
-# Print the plot
-print(QCPCAPlot)
+}
+
+
+# Set a function for a correlation heatmap 
+GCcorrHeatmap_fn <- function(inputList, Title) {
+
+    # Extract transformed count matrix
+    mtx <- assay(inputList[[2]])
+
+    # Calculate correlation and store in the matrix
+    mtx <- cor(mtx)
+
+    # Set heatmap annotation 
+    ColOfInterest <- !colnames(metadata) %in% c("Sample", "Path")
+    HeatmapAnno <- as.data.frame(metadata[, ColOfInterest])
+    rownames(HeatmapAnno) <- SampleNames
+
+    # Create a correlation heatmap
+    return(pheatmap(mtx, 
+             annotation=HeatmapAnno,
+             main=paste("Sample Correlation Heatmap:",
+                        Title)))
+
+}
+
+```
+
+
+## Sample QC: Principal Component Analysis 
+
+
+
+
+```{r QC_PCA}
+
+
+# TPM
+QCPCA_fn(TPM, "QC PCA: TPM")
+
+# Counts
+QCPCA_fn(Counts, "QC PCA: Counts")
 
 
 ```
 
-## Sample QC: Sample Clustering Heatmap
 
-```{r QC_heatmap}
-
-# Clean the extracted PCA eigenvalue data 
-EigenValues <- as.matrix(PCAMatrix[, c("PC1", "PC2")])
-
-# Setting heatmap metadata for annotation
-HeatmapAnno <- PCAMatrix[, GroupOfInterest]
-names(HeatmapAnno) <- rownames(PCAMatrix)
-HeatmapAnno <- as.data.frame(HeatmapAnno)
-
-# Create a heatmap
-pheatmap(EigenValues, 
-         annotation_row=HeatmapAnno, 
-         main="Sample Clustering Heatmap")
-
-
-```
 
 
 ## Sample QC: Sample Correlation Heatmap
 
 
 ```{r QC_correlation_heatmap}
+mtx <- assay(Counts[[2]])
 
-# Extract a normalized count matrix
-vsdMatrix <- assay(vsd)
+    # Calculate correlation and store in the matrix
+    mtx <- cor(mtx)
 
-corMatrix <- cor(vsdMatrix)
+    # Set heatmap annotation 
+    ColOfInterest <- !colnames(metadata) %in% c("Sample", "Path")
+    HeatmapAnno <- as.data.frame(metadata[, ColOfInterest])
+    rownames(HeatmapAnno) <- SampleNames
 
-pheatmap(corMatrix,
-         annotation=HeatmapAnno,
-         main="Sample Correlation Heatmap")
+    # Create a correlation heatmap
+    pheatmap(mtx, 
+             annotation=HeatmapAnno,
+             main=paste("Sample Correlation Heatmap"))
 
+
+
+GCcorrHeatmap_fn(Counts, "TPM") 
 ```
 
 ## Running DE analysis
