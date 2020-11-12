@@ -22,6 +22,9 @@ library(tximport)
 library(ggplot2)
 library(DESeq2)
 library(pheatmap)
+library(gridExtra)
+library(ggplotify)
+library(ggrepel)
 ```
 
 ## Setting AnnotationHub
@@ -331,7 +334,7 @@ normf <- as.data.frame(normalizationFactors(Counts[[1]])) %>%
 normf$Sample <- as.factor(normf$Sample, levels=SampleNames)
 normf$Group <- as.factor(normf$Group, levels=GroupLevel)
 
-
+# Create a scatter plot showing distribution of normalization factors 
 ggplot(normf, 
        aes(x=Sample, y=Normalization_Factor)) + 
 geom_jitter(alpha=0.5, aes(color=Group)) + 
@@ -372,9 +375,12 @@ QCPCA_fn <- function(inputList, Title) {
 
 }
 
+# Set heatmap annotation 
+ColOfInterest <- !colnames(metadata) %in% c("Sample", "Path")
+HeatmapAnno <- as.data.frame(metadata[, ColOfInterest])
 
 # Set a function for a correlation heatmap 
-GCcorrHeatmap_fn <- function(inputList, Title) {
+QCcorrHeatmap_fn <- function(inputList, Title) {
 
     # Extract transformed count matrix
     mtx <- assay(inputList[[2]])
@@ -382,16 +388,14 @@ GCcorrHeatmap_fn <- function(inputList, Title) {
     # Calculate correlation and store in the matrix
     mtx <- cor(mtx)
 
-    # Set heatmap annotation 
-    ColOfInterest <- !colnames(metadata) %in% c("Sample", "Path")
-    HeatmapAnno <- as.data.frame(metadata[, ColOfInterest])
+    
     rownames(HeatmapAnno) <- SampleNames
-
+    colnames(HeatmapAnno) <- colnames(metadata)[ColOfInterest]
     # Create a correlation heatmap
-    return(pheatmap(mtx, 
+    return(as.ggplot(pheatmap(mtx, 
              annotation=HeatmapAnno,
              main=paste("Sample Correlation Heatmap:",
-                        Title)))
+                        Title))))
 
 }
 
@@ -400,19 +404,16 @@ GCcorrHeatmap_fn <- function(inputList, Title) {
 
 ## Sample QC: Principal Component Analysis 
 
+- Checkpoints in PCA: source of variation, sample outlier
 
 
 
 ```{r QC_PCA}
 
 
-# TPM
-QCPCA_fn(TPM, "QC PCA: TPM")
-
-# Counts
-QCPCA_fn(Counts, "QC PCA: Counts")
-
-
+grid.arrange(QCPCA_fn(TPM, "QC PCA: TPM"), 
+             QCPCA_fn(Counts, "QC PCA: Counts"), 
+             nrow=1)
 ```
 
 
@@ -420,26 +421,21 @@ QCPCA_fn(Counts, "QC PCA: Counts")
 
 ## Sample QC: Sample Correlation Heatmap
 
+- Checkpoint of correlation heatmap: distance between samples, correlation in a group
 
 ```{r QC_correlation_heatmap}
-mtx <- assay(Counts[[2]])
 
-    # Calculate correlation and store in the matrix
-    mtx <- cor(mtx)
+# TPM
+QCcorrHeatmap_fn(TPM, "TPM") 
+# Counts
+QCcorrHeatmap_fn(Counts, "Counts") 
 
-    # Set heatmap annotation 
-    ColOfInterest <- !colnames(metadata) %in% c("Sample", "Path")
-    HeatmapAnno <- as.data.frame(metadata[, ColOfInterest])
-    rownames(HeatmapAnno) <- SampleNames
-
-    # Create a correlation heatmap
-    pheatmap(mtx, 
-             annotation=HeatmapAnno,
-             main=paste("Sample Correlation Heatmap"))
+grid.arrange(QCcorrHeatmap_fn(TPM, "TPM"), 
+            (QCcorrHeatmap_fn(Counts, "Counts")), 
+             nrow=1) 
 
 
 
-GCcorrHeatmap_fn(Counts, "TPM") 
 ```
 
 ## Running DE analysis
@@ -447,267 +443,378 @@ GCcorrHeatmap_fn(Counts, "TPM")
 
 ```{r DE_analysis}
 
-# Run DESeq 
-dds <- DESeq(dds)
+# Create a list for TPM and Counts dds 
+ddsList <- list(TPM=TPM[[1]], Counts=Counts[[1]]) 
+
+for (i in 1:2) {
+
+    # Run DESeq() 
+    ddsList[[i]] <- DESeq(ddsList[[i]])
+    print(resultsNames(ddsList[[i]]))
+}
 
 
-# Check result names 
-ResNames <- resultsNames(dds)
-print(ResNames)
 
 ```
 
 ## Creating a dispersion plot
 
+- Dispersion is important since estimation by DESeq2 algorithm is based on the assumption that genes with similar expression levels have similar dispersion. If an RNA-seq dataset doesn't satisfy this assumption, use other DE algorithm than DESeq2. 
+
+
 ```{r dispersion_plot}
 
-plotDispEsts(dds)
+
+# Plot dispersion  
+
+for (x in c("TPM", "Counts")) {
+
+    plotDispEsts(ddsList[[x]], 
+                 ylab="Dispersion", 
+                 xlab="Mean of Normalized Counts", 
+                 main=paste("Dispersion of", x, "Input"))
+}
+
+```
+
+
+## Performing shrinkage 
+
+- Shrinkage helping reducing false positives 
+- Magnitude of shrinkage is affected by dispersion and sample size
+- When the **type="apeglm"**, the **coef** argument is used instead of constrast. In this dataset, you can set **coef=Coef** where **Coef <- resultsNames(ddsList[[1]])**. 
+- When the **type** is set to **"normal"**, the **contrast** is set as shown below. 
+
+
+```{r shrinkage}
+
+# Create an empty list for shrunken dds
+shr_ddsList <- list() 
+
+for (i in 1:2) {
+
+    # shrink
+    shr_ddsList[[i]] <- lfcShrink(ddsList[[i]], 
+                                  contrast=Contrast, # contrast  
+                                  type="normal")     # is paired with "normal" type
+}
 
 
 ```
 
-## Setting how to extract fold-change results
-### Change variables below
 
-```{r setting_resultcondition}
+# Extracting log2FoldChange and p-values with or without shrinkage
 
-
-# Set the threshold of FDR as a variable "alpha" 
-alpha=0.1
-
-# Set the coefficients to compare 
-Coef <- ResNames[-1]
-print(Coef) 
+- The **alpha** denotes threshold of **false discovery rate (FDR)** assigned by users. 
+- In this analysis, alpha is set to 0.1 
 
 
-# Set a function to clean result table 
-LFCTable_fn <- function(df) {
+```{r extracting_log2FoldChanges}
+
+# Set FDR threshold 
+alpha=0.1 
+
+# Set a function cleaning table
+Sig_fn <- function(df, Input) {
 
     df <- df %>% 
-        rownames_to_column(var="Annotation") %>%
-        separate("Annotation", c("Transcript", "Gene")) %>%
+        rownames_to_column(var="Gene") %>%
         mutate(FDR=ifelse(padj < 0.1 & !is.na(padj), 
                                    "< 0.1", 
-                                   "> 0.1")) 
+                                   "> 0.1"), 
+               Input=Input) 
 
     return(df)
 }
-```
-
-## Extracting log2FoldChanges
-### You can change alpha depending on your interest of FDR level
 
 
+# Initialize lists of result tables with (resList) or without (shr_resList) shrinkage
+resList <- ddsList 
 
-```{r DEresult_extraction}
+shr_resList <- ddsList  
 
-# Extract DE results
-# The Contrast variable was defined in the preparing_importing.sf chunk
+for (i in 1:2) {
 
+    # Extract results
+    resList[[i]] <- as.data.frame(results(ddsList[[i]], 
+                                          contrast=Contrast, 
+                                          alpha=alpha))
 
+    shr_resList[[i]] <- as.data.frame(shr_ddsList[[i]])
 
-# Extraction with no shrinkage
-# alpha: FDR threshold
-Res <- results(dds, contrast=Contrast, alpha=alpha)
-
-# Convert the LFC data to a data frame
-ResDF <- LFCTable_fn(as.data.frame(Res))
-
-
-# Save the LFC data 
-write.csv(ResDF, "./csv/Read_LFC_noshrinkage.csv")
-
-# Extracttion without shrinkage in a list 
-# name has to be determined in the previous chunk
-resList <- list()
-
-for (i in 1:length(Coef)) {
-
-    myresult <- lfcShrink(dds,
-                          coef=Coef[i],
-                          type="apeglm")
-    resList[i] <- myresult
+    # clean the data frame
+    resList[[i]] <- Sig_fn(resList[[i]], names(ddsList)[i])
+    shr_resList[[i]] <- Sig_fn(shr_resList[[i]], names(ddsList)[i])
+    
 }
 
 
-
 ```
 
-## Determining what comparison to explore 
-### Checkout resList in the previous chunk and save it to a data frame 
+
+## Exploratory data analysis of the extracted log2FoldChange tables
 
 
-```{r LFC_to_dataframe}
 
-# Save data of interest as a data frame for further analysis 
-shRes <- as.data.frame(resList[[1]])
+```{r exploring_foldtable}
 
-# Clean the LFC table 
-shRes <- LFCTable_fn(shRes)
+# No shrinkage summary
+summary(resList)
+head(resList[[1]])
+head(resList[[2]])
 
-# Save the LFC table
-write.csv(shRes, "./csv/Read_LFC_shrinkage.csv")
-
-head(shRes)
-```
-
-## Exploring distribution of false discovery rate (FDR)
-
-```{r FDR_distribution}
-
-# Create a plot presenting distribution of FDR
-FDR_distPlot <- 
-    ggplot(shRes,
-           aes(x=padj)) + 
-geom_density() + 
-theme_bw() +
-ggtitle("Distribution of False Discovery Rate (FDR)") + 
-xlab("Adjusted P-Value") + 
-ylab("Density") + 
-geom_vline(xintercept=alpha, color="red")
-
-# Print the plot
-print(FDR_distPlot)
-
-
-```
-
-## Exploring FDR statistics
-
-### - NumOfTx: total number of transcripts
-### - BelowAlpha: number of transcripts whose FDR is below 0.1
-### - NumofNAInFDR: number of transcripts whose FDR is NA
-### - PropOfAboveAlpha: BelowAlpha/NumOfTx 
-
-
-```{r FDR_statistics}
-
-FDR_stat <- data.frame(NumOfTx=nrow(shRes),
-                       BelowAlpha=sum(shRes$FDR == "< 0.1"),
-                       NumOfNAInFDR=sum(is.na(shRes$padj)), 
-                       PropOfAboveAlpha=sum(shRes$FDR == "< 0.1") / nrow(shRes))
-
-head(FDR_stat)
-```
-
-## Exploring distribution of log2FoldChange
-
-### Black: total transcripts (padj =/= NA)
-### Colored: transcripts above or below FDR=0.1
-
-
-```{r L2FC_distribution}
-
-# Subset transcripts whose padj are not NA
-shRes_nonNa <- subset(shRes, !is.na(padj))
-
-
-L2FC_dist <- 
-    ggplot(shRes_nonNa,
-           aes(x=log2FoldChange)) + 
-geom_density(color="black") + 
-geom_density(data=shRes_nonNa,
-             aes(x=log2FoldChange,
-                 color=FDR)) +
-theme_bw() +
-ggtitle("Distribution of Fold Change Values") + 
-ylab("Density")
-
-print(L2FC_dist)
+# Shrinkage summary
+summary(shr_resList)
+head(shr_resList[[1]])
+head(shr_resList[[2]])
 
 ```
 
 
-
-## Exploring mean-difference with an MA plot
+## Exploring mean-difference relationship with MA plots
 
 
 ```{r MAplot}
 
+# Set ylim: has to adjusted by users depending on data 
+yl <- c(-20, 20)
 
 # Define a function creating an MA plot
-MA_fn <- function(df, tit) {
+MA_fn <- function(List, Shr) {
 
-    ggplot(df, 
-           aes(x=baseMean,
-               y=log2FoldChange,
-               color=FDR)) +
+    MAList <- list()
+
+    for (i in 1:length(List)) {
+             MAplot <- ggplot(List[[i]], 
+                              aes(x=baseMean,
+                                  y=log2FoldChange,
+                                  color=FDR)) +
 geom_point()+ 
 scale_x_log10() + 
 theme_bw() + 
 scale_color_manual(values=c("blue", "grey")) + 
-ggtitle(tit)
+ggtitle(paste("MA plot:", names(List)[i], "Input with", Shr)) + 
+ylim(yl[1], yl[2])
+
+MAList[[i]] <- MAplot
+    }
+    return(MAList)
+
 }
 
 
-# Create MA plots with or without shrinkage
-MAplot_noshr <- MA_fn(ResDF, "Mean-Differene without shrinkage")
-MAplot_shr <- MA_fn(shRes, "Mean-Difference with shrinkage")
-
-# Print the plots
-print(MAplot_noshr)
-print(MAplot_shr)
+# Create MA plots with or without shrinkage and store in a list
+MA <- MA_fn(resList, "No Shrinkage")
+shr_MA <- MA_fn(shr_resList, "Shrinkage")
 
 ```
 
-## Volcano plot
+## Visualizing MA plots
+
+- **x-axis**: expression level 
+- **y-axis**: fold change (log2FoldChange)
+- **Upper**: TPM with (left) or without (right) shrinkage
+- **Lower**: Counts with (left) or without (right) shrinkage
+
+
+```{r presenting_MAplots}
+
+# TPM with or without shrinkage
+grid.arrange(MA[[1]], shr_MA[[1]],
+             MA[[2]], shr_MA[[2]], 
+             nrow=2)
+
+```
+
+
+
+## Exploring distribution of false discovery rate (FDR)
+
+- Distribution of adjusted p-val was presented by input type
+- Blue dashed line: FDR = 0.1
+
+```{r FDR_distribution}
+
+
+# Combining total data table 
+res <- rbind(resList[['TPM']], resList[['Counts']])
+levels(res$Input) <- c("TPM", "Counts")
+
+# Create a plot presenting distribution of FDR
+ggplot(res,
+       aes(x=padj, color=Input)) + 
+geom_density(size=1) + 
+theme_bw() +
+ggtitle("Distribution of False Discovery Rate (FDR)") + 
+xlab("Adjusted P-Value") + 
+ylab("Density") + 
+geom_vline(xintercept=alpha, 
+           color="blue", 
+           linetype="dashed",
+           size=1) + 
+scale_x_continuous(breaks=seq(0, 1, by=0.1))
+
+
+```
+
+## Volcano plots
+
+- **x-axis**: expression level
+- **y-axis**: log odds (larger log odds = more promising) 
+- Red dashed line: log2FoldChange = 1 
 
 ```{r volcano_plot}
 
+# Set a basic volcano plot function 
+Volcano_fn <- function(df, Label=NULL) {
 
-ggplot(shRes, 
+
+ggplot(res, 
        aes(x=log2FoldChange,
            y= -log10(padj),
-           color=FDR)) + 
+           color=FDR,
+           label=Label)) + 
 geom_point() +
+facet_grid(~ Input) + 
 theme_bw() +
 scale_color_manual(values=c("blue", "grey")) + 
 ggtitle("Volcano Plot") + 
-ylab("-log10(FDR)")
+ylab("-log10(FDR)") + 
+theme(strip.text.x=element_text(size=12)) + 
+geom_vline(xintercept=c(-1, 1), color="red", linetype="dashed") 
+}
+
+# Display the volcano plots by input
+Volcano_fn(res)
+
 
 ```
 
-## Exploring transcription profiling (FDR < 0.1)
+
+## Volcano plots with promising genes 
+
+- **Log odds** threshold (y-axis): **> 20**
+
+```{r high_logodds_genes}
+
+# Assign log odds threshold 
+LogOddsCut=20 
+
+
+# Add a column indicating high log odds genes 
+res <- res %>% 
+    mutate(Label=ifelse(-log10(padj) > LogOddsCut, 
+                                   Gene, 
+                                   "")) 
+
+# Display the genes with volcano plots
+Volcano_fn(res, Label=res$Label) + geom_text_repel(color="black")
+
+```
+
+
+
+## Exploring distribution of log2FoldChange by input type
+
+- Black dashed line: log2FoldChange = 1
+
+```{r L2FC_distribution}
+
+
+
+ggplot(res[res$FDR == "< 0.1", ],  # Subset rows with FDR < alpha 
+       aes(x=log2FoldChange,
+           color=Input)) + 
+geom_density(size=1) +
+theme_bw() + 
+ylab("Density") + 
+geom_vline(xintercept=c(-1, 1), 
+           color="black",
+           linetype="dashed", size=1) +
+ggtitle("Distribution of Log2 Folds by Input Type") 
+
+
+
+```
+
+
+
+
+
+
+## Exploring expression profiling 
+
+- Normalized count matrices are extracted from dds objects and cleaned with thresholds set at FDR and log2FoldChange
+- **lowfdrList**: a list of matrices filtered with **FDR < alpha**
+- **highfoldList**: a list of matrices filtered with **FDR < alpha** AND **log2FoldChange > user's minimum threshold (minLog)**
+- In this analysis, minLog was set to 1
+- This normalized and filtered count matrices will be used to as inputs for creating profiling heatmaps
 
 
 ```{r transcription_profiling_FDR}
 
-# Determine row numbers whose FDR is below alpha 
-RowBelowAlpha <- which(shRes$FDR == "< 0.1")
 
-# Subset normalized transcript counts with FDR below alpha 
-TranscriptsBelowAlpha <- assay(vsd)[RowBelowAlpha,]
+# Define the minimum threshold for log2FoldChange 
+minLog <- 1
 
-# Create a heatmap from TranscriptsBelowAlpha 
-pheatmap(TranscriptsBelowAlpha,
-         annotation=HeatmapAnno,
-         main="Transcription Profiles (FDR < 0.1)")
+# Initialize a list 
+lowfdrList <- ddsList   # A list for normalized counts matrix with FDR below alpha
+highfoldList <- ddsList  # A list for normalized counts with log2foldchange over minLog
+
+
+
+for (i in 1:2) {
+
+    # Create vectors of TRUE/FALSE filtering alpha and log2foldchange
+    BelowAlpha <- resList[[i]]$FDR == "< 0.1"
+    overminLog <- BelowAlpha & resList[[i]]$log2FoldChange > minLog
+    
+    # Extract normalized counts from dds objects with counts() 
+    normCounts <- counts(ddsList[[i]], 
+                            normalized=T)
+
+    # Update the normalized count matrix with FDR below alpha
+    lowfdrList[[i]] <- normCounts[BelowAlpha, ]
+    highfoldList[[i]] <- normCounts[overminLog, ]
+
+    summary(lowfdrList[[i]])
+    summary(highfoldList[[i]])
+}
 
 ```
 
-## Exploring transcription profiling 
-## (FDR < 0.1 & log2FoldChange >= 1)
+## Creating heatmaps for expression profiling 
+
 
 
 ```{r transciption_profiling_FDRandFold}
 
-# Set minimum log2FoldChange of your interest: MinL2F
-MinL2F <- 1
 
-# Determine row numbers whose log2FoldChange >= MinL2F
-AboveMinL2F <- which(shRes$FDR == "< 0.1" &
-                      shRes$log2FoldChange >= MinL2F)
+lowfdrMap <- ddsList()
+highfoldMap <- ddsList() 
+
+ProfileHeatmap_fn <- function(inputmatrix, Title) {
+
+    as.ggplot(pheatmap(inputmatrix, 
+                       annotation=HeatmapAnno, 
+                       main=paste("Transcription Profiles with", 
+                                  names(ddsList)[i], 
+                                  "input and", 
+                                  Title,)))
+}
 
 
-# Subset normalized transcript counts with log2FoldChange above MinL2F 
-TranscriptsAboveMinL2F <- assay(vsd)[AboveMinL2F,]
+for (i in 1:2) {
+
+    lowfdrMap[[i]] <- ProfileHeatmap_fn(lowfdrList[[i]], 
+                                        paste("FDR <", alpha))
+    highfoldMap[[i]] <- ProfileHeatmap_fn(highfoldList[[i]], 
+                                          paste("FDR <", 
+                                                alpha, 
+                                                "Plus Minimum Log2 Fold Change >", minLog))
+}
 
 
-pheatmap(TranscriptsAboveMinL2F,
-         annotation=HeatmapAnno,
-         main="Transcription Profiles (FDR < 0.1 and log2FoldChange >= 1)",fontsize_row=5)
-
-length(AboveMinL2F)
 
 ```
 
