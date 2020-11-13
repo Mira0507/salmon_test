@@ -1,4 +1,5 @@
 ---
+title: Comparison of TPM and original counts in DE analysis with the DESeq2 package
 output: html_document
 ---
 
@@ -104,6 +105,9 @@ GroupLevel <- c("Mock", "COVID")
 
 # Define contrast for DE analysis
 Contrast <- c("Group", "COVID", "Mock")
+
+# Define a vector for comparing TPM vs Counts effect 
+TvC <- c("TPM", "Counts")
 
 
 # Set a directory to save csv files
@@ -245,7 +249,12 @@ Counts[[2]]
 ## Estimating size factors, dispersions, and conducting the Wald Test
 
 - **Dispersion** is calculated as a **measure of variation** instead of variance as variance gets larger when gene expression gets higher. 
-- **Wald test** is the default setting of DESeq2 testing null hypothesis when you compare **two groups**. Use **Likelihood ratio test (LRT)** when you have compare **more than two groups**. 
+- **Wald test** is the default setting of DESeq2 testing null hypothesis when you compare **two groups**. Use **Likelihood ratio test (LRT)** when you have compare **more than two groups**.     
+- Message when "Counts <- DESeqPrep_fn(Counts)" was run:       
+using **'avgTxLength'** from assays(dds), correcting for library size
+gene-wise dispersion estimates
+mean-dispersion relationship
+final dispersion estimates
 
 ```{r DESeq_prep}
 
@@ -323,6 +332,8 @@ ggplot(sizeFactor, aes(x=Sample,
 
 - DESeq2 performs an internal normalization where geometric mean is calculated for each gene across all samples. The counts for a gene in each sample is then divided by this mean. The median of these ratios in a sample is the size factor for that sample.
 
+- Blue dashed line: normalization factor = 1
+
 
 ```{r plotting_normalizationfactors}
 
@@ -331,8 +342,8 @@ normf <- as.data.frame(normalizationFactors(Counts[[1]])) %>%
     gather(Sample, Normalization_Factor) %>%
     inner_join(metadata[, 1:2], by="Sample") 
 
-normf$Sample <- as.factor(normf$Sample, levels=SampleNames)
-normf$Group <- as.factor(normf$Group, levels=GroupLevel)
+normf$Sample <- factor(normf$Sample, levels=SampleNames)
+normf$Group <- factor(normf$Group, levels=GroupLevel)
 
 # Create a scatter plot showing distribution of normalization factors 
 ggplot(normf, 
@@ -370,7 +381,7 @@ GroupOfInterest <- Contrast[1]
 # Set a function for a PCA plot
 QCPCA_fn <- function(inputList, Title) {
 
-    plotPCA(inputList[[2]],
+    plotPCA(inputList[[2]],    # takes vsd
             intgroup=GroupOfInterest) + theme_bw() + ggtitle(Title)
 
 }
@@ -378,24 +389,25 @@ QCPCA_fn <- function(inputList, Title) {
 # Set heatmap annotation 
 ColOfInterest <- !colnames(metadata) %in% c("Sample", "Path")
 HeatmapAnno <- as.data.frame(metadata[, ColOfInterest])
+rownames(HeatmapAnno) <- SampleNames
+colnames(HeatmapAnno) <- colnames(metadata)[ColOfInterest]
 
 # Set a function for a correlation heatmap 
 QCcorrHeatmap_fn <- function(inputList, Title) {
 
     # Extract transformed count matrix
-    mtx <- assay(inputList[[2]])
+    mtx <- assay(inputList[[2]])      # takes vsd
 
     # Calculate correlation and store in the matrix
     mtx <- cor(mtx)
 
     
-    rownames(HeatmapAnno) <- SampleNames
-    colnames(HeatmapAnno) <- colnames(metadata)[ColOfInterest]
+    
     # Create a correlation heatmap
-    return(as.ggplot(pheatmap(mtx, 
+    return(pheatmap(mtx, 
              annotation=HeatmapAnno,
              main=paste("Sample Correlation Heatmap:",
-                        Title))))
+                        Title)))
 
 }
 
@@ -413,7 +425,7 @@ QCcorrHeatmap_fn <- function(inputList, Title) {
 
 grid.arrange(QCPCA_fn(TPM, "QC PCA: TPM"), 
              QCPCA_fn(Counts, "QC PCA: Counts"), 
-             nrow=1)
+             nrow=2)
 ```
 
 
@@ -430,10 +442,6 @@ QCcorrHeatmap_fn(TPM, "TPM")
 # Counts
 QCcorrHeatmap_fn(Counts, "Counts") 
 
-grid.arrange(QCcorrHeatmap_fn(TPM, "TPM"), 
-            (QCcorrHeatmap_fn(Counts, "Counts")), 
-             nrow=1) 
-
 
 
 ```
@@ -446,11 +454,11 @@ grid.arrange(QCcorrHeatmap_fn(TPM, "TPM"),
 # Create a list for TPM and Counts dds 
 ddsList <- list(TPM=TPM[[1]], Counts=Counts[[1]]) 
 
-for (i in 1:2) {
+for (x in TvC) {
 
     # Run DESeq() 
-    ddsList[[i]] <- DESeq(ddsList[[i]])
-    print(resultsNames(ddsList[[i]]))
+    ddsList[[x]] <- DESeq(ddsList[[x]])
+    print(resultsNames(ddsList[[x]]))
 }
 
 
@@ -467,7 +475,7 @@ for (i in 1:2) {
 
 # Plot dispersion  
 
-for (x in c("TPM", "Counts")) {
+for (x in TvC) {
 
     plotDispEsts(ddsList[[x]], 
                  ylab="Dispersion", 
@@ -480,21 +488,21 @@ for (x in c("TPM", "Counts")) {
 
 ## Performing shrinkage 
 
-- Shrinkage helping reducing false positives 
+- Shrinkage is beneficial to reduce false positives 
 - Magnitude of shrinkage is affected by dispersion and sample size
-- When the **type="apeglm"**, the **coef** argument is used instead of constrast. In this dataset, you can set **coef=Coef** where **Coef <- resultsNames(ddsList[[1]])**. 
+- When the **type** is set to **"apeglm"**, the **coef** argument is used instead of constrast. In this dataset, you can set **coef=Coef** where **Coef <- resultsNames(ddsList[[1]])**. 
 - When the **type** is set to **"normal"**, the **contrast** is set as shown below. 
 
 
 ```{r shrinkage}
 
 # Create an empty list for shrunken dds
-shr_ddsList <- list() 
+shr_ddsList <- list(TPM=c(), Counts=c()) 
 
-for (i in 1:2) {
+for (x in TvC) {
 
     # shrink
-    shr_ddsList[[i]] <- lfcShrink(ddsList[[i]], 
+    shr_ddsList[[x]] <- lfcShrink(ddsList[[x]], 
                                   contrast=Contrast, # contrast  
                                   type="normal")     # is paired with "normal" type
 }
@@ -533,18 +541,19 @@ resList <- ddsList
 
 shr_resList <- ddsList  
 
-for (i in 1:2) {
+for (x in TvC) {
+
 
     # Extract results
-    resList[[i]] <- as.data.frame(results(ddsList[[i]], 
+    resList[[x]] <- as.data.frame(results(ddsList[[x]], 
                                           contrast=Contrast, 
                                           alpha=alpha))
 
-    shr_resList[[i]] <- as.data.frame(shr_ddsList[[i]])
+    shr_resList[[x]] <- as.data.frame(shr_ddsList[[x]])
 
     # clean the data frame
-    resList[[i]] <- Sig_fn(resList[[i]], names(ddsList)[i])
-    shr_resList[[i]] <- Sig_fn(shr_resList[[i]], names(ddsList)[i])
+    resList[[x]] <- Sig_fn(resList[[x]], x)
+    shr_resList[[x]] <- Sig_fn(shr_resList[[x]], x)
     
 }
 
@@ -560,44 +569,45 @@ for (i in 1:2) {
 
 # No shrinkage summary
 summary(resList)
-head(resList[[1]])
-head(resList[[2]])
+head(resList[['TPM']])
+head(resList[['Counts']])
 
 # Shrinkage summary
 summary(shr_resList)
-head(shr_resList[[1]])
-head(shr_resList[[2]])
+head(shr_resList[['TPM']])
+head(shr_resList[['Counts']])
 
 ```
 
 
 ## Exploring mean-difference relationship with MA plots
 
+- Red dashed lines: log2FoldChange = -1 and 1
 
 ```{r MAplot}
 
 # Set ylim: has to adjusted by users depending on data 
 yl <- c(-20, 20)
 
+# Set min log2 fold change of interest 
+mLog <- c(-1, 1)
+
 # Define a function creating an MA plot
 MA_fn <- function(List, Shr) {
 
-    MAList <- list()
+    MAList <- ddsList 
 
-    for (i in 1:length(List)) {
-             MAplot <- ggplot(List[[i]], 
-                              aes(x=baseMean,
-                                  y=log2FoldChange,
-                                  color=FDR)) +
-geom_point()+ 
-scale_x_log10() + 
-theme_bw() + 
-scale_color_manual(values=c("blue", "grey")) + 
-ggtitle(paste("MA plot:", names(List)[i], "Input with", Shr)) + 
-ylim(yl[1], yl[2])
+    for (i in 1:2) {
 
-MAList[[i]] <- MAplot
+        MAplot <- ggplot(List[[i]], 
+                         aes(x=baseMean,
+                             y=log2FoldChange,
+                             color=FDR)) + geom_point() + scale_x_log10() + theme_bw() + scale_color_manual(values=c("blue", "grey")) + ggtitle(paste("MA plot:", names(List)[i], "Input with", Shr)) + ylim(yl[1], yl[2])+ geom_hline(yintercept=c(mLog[1], mLog[2]), linetype="dashed", color="red")
+
+        MAList[[i]] <- MAplot
+
     }
+
     return(MAList)
 
 }
@@ -620,9 +630,10 @@ shr_MA <- MA_fn(shr_resList, "Shrinkage")
 ```{r presenting_MAplots}
 
 # TPM with or without shrinkage
-grid.arrange(MA[[1]], shr_MA[[1]],
-             MA[[2]], shr_MA[[2]], 
-             nrow=2)
+grid.arrange(MA[[1]], shr_MA[[1]], nrow=1)
+
+# TPM with or without shrinkage
+grid.arrange(MA[[2]], shr_MA[[2]], nrow=1)
 
 ```
 
@@ -631,14 +642,14 @@ grid.arrange(MA[[1]], shr_MA[[1]],
 ## Exploring distribution of false discovery rate (FDR)
 
 - Distribution of adjusted p-val was presented by input type
-- Blue dashed line: FDR = 0.1
+- Black dashed line: FDR = 0.1
 
 ```{r FDR_distribution}
 
 
 # Combining total data table 
 res <- rbind(resList[['TPM']], resList[['Counts']])
-levels(res$Input) <- c("TPM", "Counts")
+res$Input <- factor(res$Input, levels=TvC)  # TvC=c("TPM", "Counts")
 
 # Create a plot presenting distribution of FDR
 ggplot(res,
@@ -649,19 +660,17 @@ ggtitle("Distribution of False Discovery Rate (FDR)") +
 xlab("Adjusted P-Value") + 
 ylab("Density") + 
 geom_vline(xintercept=alpha, 
-           color="blue", 
+           color="black", 
            linetype="dashed",
            size=1) + 
-scale_x_continuous(breaks=seq(0, 1, by=0.1))
-
-
+scale_x_continuous(breaks=seq(0, 1, by=0.1)) 
 ```
 
 ## Volcano plots
 
 - **x-axis**: expression level
 - **y-axis**: log odds (larger log odds = more promising) 
-- Red dashed line: log2FoldChange = 1 
+- Red dashed lines: log2FoldChange = -1 and 1 
 
 ```{r volcano_plot}
 
@@ -675,13 +684,16 @@ ggplot(res,
            color=FDR,
            label=Label)) + 
 geom_point() +
-facet_grid(~ Input) + 
+facet_grid(Input ~.) + 
 theme_bw() +
 scale_color_manual(values=c("blue", "grey")) + 
 ggtitle("Volcano Plot") + 
 ylab("-log10(FDR)") + 
-theme(strip.text.x=element_text(size=12)) + 
-geom_vline(xintercept=c(-1, 1), color="red", linetype="dashed") 
+theme(strip.text.y=element_text(size=12)) + 
+geom_vline(xintercept=c(mLog[1], mLog[2]), 
+           color="red", 
+           linetype="dashed", 
+           size=1) 
 }
 
 # Display the volcano plots by input
@@ -716,7 +728,7 @@ Volcano_fn(res, Label=res$Label) + geom_text_repel(color="black")
 
 ## Exploring distribution of log2FoldChange by input type
 
-- Black dashed line: log2FoldChange = 1
+- Black dashed lines: log2FoldChange = -1 and 1 
 
 ```{r L2FC_distribution}
 
@@ -728,7 +740,7 @@ ggplot(res[res$FDR == "< 0.1", ],  # Subset rows with FDR < alpha
 geom_density(size=1) +
 theme_bw() + 
 ylab("Density") + 
-geom_vline(xintercept=c(-1, 1), 
+geom_vline(xintercept=c(mLog[1], mLog[2]), 
            color="black",
            linetype="dashed", size=1) +
 ggtitle("Distribution of Log2 Folds by Input Type") 
@@ -739,23 +751,18 @@ ggtitle("Distribution of Log2 Folds by Input Type")
 
 
 
-
-
-
 ## Exploring expression profiling 
 
-- Normalized count matrices are extracted from dds objects and cleaned with thresholds set at FDR and log2FoldChange
+- VST transformed count matrices are extracted from vsd objects and cleaned with thresholds set at FDR and log2FoldChange
 - **lowfdrList**: a list of matrices filtered with **FDR < alpha**
 - **highfoldList**: a list of matrices filtered with **FDR < alpha** AND **log2FoldChange > user's minimum threshold (minLog)**
 - In this analysis, minLog was set to 1
-- This normalized and filtered count matrices will be used to as inputs for creating profiling heatmaps
+- This transformed and filtered count matrices will be used to as inputs for creating profiling heatmaps
 
 
-```{r transcription_profiling_FDR}
+```{r transcription_profiling}
 
 
-# Define the minimum threshold for log2FoldChange 
-minLog <- 1
 
 # Initialize a list 
 lowfdrList <- ddsList   # A list for normalized counts matrix with FDR below alpha
@@ -763,59 +770,60 @@ highfoldList <- ddsList  # A list for normalized counts with log2foldchange over
 
 
 
-for (i in 1:2) {
+for (x in TvC) {
 
-    # Create vectors of TRUE/FALSE filtering alpha and log2foldchange
-    BelowAlpha <- resList[[i]]$FDR == "< 0.1"
-    overminLog <- BelowAlpha & resList[[i]]$log2FoldChange > minLog
+    # Create filtering vectors with alpha and log2foldchange
+    BelowAlpha <- resList[[x]]$FDR == "< 0.1"
+    overmLog <- resList[[x]]$log2FoldChange > mLog[2]  # mLog has been set to c(-1, 1) previously
+
+    # Extract transformed counts from vsd objects (TPM[['vsd']] and Counts[['vsd']]) 
+    if (x == "TPM") {
+
+        vsdCounts <- assay(TPM[['vsd']])
     
-    # Extract normalized counts from dds objects with counts() 
-    normCounts <- counts(ddsList[[i]], 
-                            normalized=T)
+    } else {
 
+        vsdCounts <- assay(Counts[['vsd']])
+    }
+
+    
     # Update the normalized count matrix with FDR below alpha
-    lowfdrList[[i]] <- normCounts[BelowAlpha, ]
-    highfoldList[[i]] <- normCounts[overminLog, ]
+    lowfdrList[[x]] <- vsdCounts[BelowAlpha, ]
+    highfoldList[[x]] <- vsdCounts[BelowAlpha & overminLog, ]
 
-    summary(lowfdrList[[i]])
-    summary(highfoldList[[i]])
+    summary(lowfdrList[[x]])
+    summary(highfoldList[[x]])
 }
 
-```
+# Initialize map lists 
+lowfdrMap <- ddsList
+highfoldMap <- ddsList 
 
-## Creating heatmaps for expression profiling 
-
-
-
-```{r transciption_profiling_FDRandFold}
-
-
-lowfdrMap <- ddsList()
-highfoldMap <- ddsList() 
-
-ProfileHeatmap_fn <- function(inputmatrix, Title) {
-
+# Set a function creating a heatmap
+ProfileHeatmap_fn <- function(inputmatrix, Title1, Title2, Title3=NULL) {
+    
     as.ggplot(pheatmap(inputmatrix, 
-                       annotation=HeatmapAnno, 
-                       main=paste("Transcription Profiles with", 
-                                  names(ddsList)[i], 
-                                  "input and", 
-                                  Title,)))
+             annotation=HeatmapAnno, 
+             main=paste("Transcription Profiles with", 
+                        Title1, 
+                        "input and", 
+                        Title2, 
+                        alpha, 
+                        Title3)))
 }
 
+# Create and save heatmaps
+for (x in TvC) {
 
-for (i in 1:2) {
+    lowfdrMap[[x]] <- ProfileHeatmap_fn(lowfdrList[[x]],
+                                        Title1=x, 
+                                        Title2="FDR <")
 
-    lowfdrMap[[i]] <- ProfileHeatmap_fn(lowfdrList[[i]], 
-                                        paste("FDR <", alpha))
-    highfoldMap[[i]] <- ProfileHeatmap_fn(highfoldList[[i]], 
-                                          paste("FDR <", 
-                                                alpha, 
-                                                "Plus Minimum Log2 Fold Change >", minLog))
+    highfoldMap[[x]] <- ProfileHeatmap_fn(highfoldList[[x]], 
+                                          Title1=x, 
+                                          Title2="FDR <",
+                                          Title3=paste("Plus Minimum Log2 Fold Change >", mLog[2])) 
 }
-
-
-
 ```
 
 
