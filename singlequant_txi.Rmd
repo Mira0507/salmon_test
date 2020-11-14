@@ -348,7 +348,7 @@ ggplot(sizeFactor, aes(x=Sample,
 
 ```{r plotting_normalizationfactors}
 
-# Extract and save normalization factors in a data frame
+# Extract and normalization factors in a data frame
 normf <- as.data.frame(normalizationFactors(Counts[[1]])) %>%
     gather(Sample, Normalization_Factor) %>%
     inner_join(metadata[, 1:2], by="Sample") 
@@ -417,7 +417,6 @@ QCcorrHeatmap_fn <- function(inputList, Title) {
     # Create a correlation heatmap
     return(pheatmap(mtx, 
              annotation=HeatmapAnno,
-             show_rownames=F,
              main=paste("Sample Correlation Heatmap:",
                         Title)))
 
@@ -538,14 +537,17 @@ for (x in TvC) {
 # Set FDR threshold 
 alpha=0.1 
 
+# FDR threshold vector
+FDRv=c("< 0.1", "> 0.1") 
+
 # Set a function cleaning table
 Sig_fn <- function(df, Input) {
 
     df <- df %>% 
         rownames_to_column(var="Gene") %>%
         mutate(FDR=ifelse(padj < 0.1 & !is.na(padj), 
-                                   "< 0.1", 
-                                   "> 0.1"), 
+                                   FDRv[1], 
+                                   FDRv[2]), 
                Input=Input) 
 
     return(df)
@@ -676,11 +678,11 @@ res$Input <- factor(res$Input, levels=TvC)  # TvC=c("TPM", "Counts")
 # Create a plot presenting distribution of FDR
 ggplot(res,
        aes(x=padj, color=Input)) + 
-geom_density(size=1) + 
+geom_density(size=1, aes(y=..count..)) + 
 theme_bw() +
 ggtitle("Distribution of False Discovery Rate (FDR)") + 
 xlab("Adjusted P-Value (FDR)") + 
-ylab("Density") + 
+ylab("Count") + 
 geom_vline(xintercept=alpha, 
            color="black", 
            linetype="dashed",
@@ -765,9 +767,9 @@ Volcano_fn(res, Label=res$Label) + geom_text_repel(color="black")
 ggplot(res[res$FDR == "< 0.1", ],  # Subset rows with FDR < alpha 
        aes(x=log2FoldChange,
            color=Input)) + 
-geom_density(size=1) +
+geom_density(size=1, aes(y=..count..)) +
 theme_bw() + 
-ylab("Density") + 
+ylab("Count") + 
 geom_vline(xintercept=c(mLog[1], mLog[2]), 
            color="black",
            linetype="dashed", size=1) +
@@ -805,8 +807,8 @@ highfoldList <- ddsList  # A list for normalized counts with log2foldchange over
 for (x in TvC) {
 
     # Create filtering vectors with alpha and log2foldchange
-    BelowAlpha <- resList[[x]]$FDR == "< 0.1"
-    overmLog <- abs(resList[[x]]$log2FoldChange) > mLog[2]  # mLog has been set to c(-1, 1) previously
+    BelowAlpha <- shr_resList[[x]]$FDR == FDRv[1]
+    overmLog <- abs(shr_resList[[x]]$log2FoldChange) > mLog[2]  # mLog has been set to c(-1, 1) previously
 
     # Extract transformed counts from vsd objects (TPM[['vsd']] and Counts[['vsd']]) 
     if (x == "TPM") {
@@ -897,11 +899,119 @@ ggplot(NAstat, aes(x=Type, y=Number, group=Input, fill=Input, label=Number)) +
 
 ## Comparing DEG ranks in DE analysis between TPM and original count inputs
 
+- **FDRrankList**: ranked by FDR
+- **lfcList**: ranked by absolute fold change 
+- **UPlfcList**: ranked by magnitude of increase fold change  
+- **DOWNlfcList**: ranked by manitude of decrease fold change 
+
 
 ```{r DEG_rank}
 
+# Create a new list having DE table with FDR below alpha
+lowfdr_resList <- shr_resList 
+
+for (x in TvC) { 
+
+
+    lowfdr_resList[[x]] <- filter(shr_resList[[x]], 
+                                  !is.na(padj), padj < alpha) %>% 
+    as.data.table()
+
+
+}
+
+
+
+# Initialize new lists in order to store rank-updated result DE tables 
+FDRrankList <- lowfdr_resList
+lfcList <- lowfdr_resList
+UPlfcList <- lowfdr_resList
+DOWNlfcList <- lowfdr_resList
+
+# Set a function creating a column for the rank
+Ranking_fn <- function(x) {mutate(x, Rank=1:nrow(x))}
+
+
+
+for (x in TvC) { 
+
+    # Rearrange genes with FDR  
+    FDRrankList[[x]] <- lowfdr_resList[[x]][order(padj),] %>%
+        Ranking_fn()
+
+    # Rearrange genew with absolute log2FoldChange 
+    lfcList[[x]] <- lowfdr_resList[[x]][order(-abs(log2FoldChange)),] %>%
+        Ranking_fn()
+
+    # Rearrange genes with log2FoldChange (decreasing order)
+    UPlfcList[[x]] <- lowfdr_resList[[x]][order(-log2FoldChange),] %>%
+        Ranking_fn()
+
+    # Rearrange genes with log2FoldChange (increasing order)
+    DOWNlfcList[[x]] <- lowfdr_resList[[x]][order(log2FoldChange),] %>%
+        Ranking_fn()
+}
+
+# Explore the ranks
+print(c(FDRrankList, lfcList, UPlfcList, DOWNlfcList))
 
 ```
+
+## 
+
+
+```{r }
+combineTable_fn <- function(List){
+
+
+    full_join(List[[TvC[1]]][,.(Gene, Input, Rank, baseMean)], 
+              List[[TvC[2]]][,.(Gene, Input, Rank, baseMean)], by="Gene") %>%
+    
+    mutate(logMeanExpression=log(baseMean.x+baseMean.y/2))
+} 
+
+head(combineTable_fn(FDRrankList))
+dim(combineTable_fn(FDRrankList))
+tail(combineTable_fn(FDRrankList))
+
+compareRanks_fn <- function(df, rankedby) {
+
+ggplot(df, 
+       aes(x=Rank.x, 
+           y=Rank.y,
+           color=logMeanExpression)) +
+geom_point(alpha=0.5) + 
+theme_bw() + 
+xlab("Rank with TPM") + 
+ylab("Rank with Counts") + 
+geom_abline(slope=1, color="black", size=0.5) + 
+ggtitle(paste(rankedby, "Ranking witn TPM vs Counts Inputs")) + 
+scale_color_gradient(low="blue", high="red")
+}
+    
+
+```
+
+
+```{r}
+
+
+
+
+compareRanks_fn(combineTable_fn(FDRrankList), 
+                "FDR")
+
+compareRanks_fn(combineTable_fn(lfcList), 
+                "Absolute Log2FoldChange")
+
+compareRanks_fn(combineTable_fn(UPlfcList), 
+                "Log2FoldChange (Increase)")
+
+compareRanks_fn(combineTable_fn(DOWNlfcList), 
+                "Log2FoldChange (Decrease)")
+
+```
+
 
 ## Session Info 
 
