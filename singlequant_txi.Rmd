@@ -897,7 +897,7 @@ ggplot(NAstat, aes(x=Type, y=Number, group=Input, fill=Input, label=Number)) +
     ggtitle("Number of NA Genes") 
 ```
 
-## Comparing DEG ranks in DE analysis between TPM and original count inputs
+## Determining DEG ranks in DE analysis between TPM and original count inputs
 
 - **FDRrankList**: ranked by FDR
 - **lfcList**: ranked by absolute fold change 
@@ -905,7 +905,7 @@ ggplot(NAstat, aes(x=Type, y=Number, group=Input, fill=Input, label=Number)) +
 - **DOWNlfcList**: ranked by manitude of decrease fold change 
 
 
-```{r DEG_rank}
+```{r determining_DEGrank}
 
 # Create a new list having DE table with FDR below alpha
 lowfdr_resList <- shr_resList 
@@ -957,23 +957,32 @@ print(c(FDRrankList, lfcList, UPlfcList, DOWNlfcList))
 
 ```
 
-## 
+## Comparing DEG ranks between TPM- and Counts-input DE analysis 
 
 
-```{r }
+
+
+```{r comparing_DEGrank}
+
+# Set a function rebuilding DE tables with gene ranks 
 combineTable_fn <- function(List){
 
-
+    # Select columns and join the data frames by gene
     full_join(List[[TvC[1]]][,.(Gene, Input, Rank, baseMean)], 
               List[[TvC[2]]][,.(Gene, Input, Rank, baseMean)], by="Gene") %>%
     
-    mutate(logMeanExpression=log(baseMean.x+baseMean.y/2))
+    # Add columns assining gene expression levels, rank differences, and mean ranks
+    mutate(logMeanExpression=log(baseMean.x+baseMean.y/2),
+           RankDiff=Rank.x-Rank.y, 
+           MeanRank=(Rank.x+Rank.y)/2)
 } 
 
+# Explore outputs of the function
 head(combineTable_fn(FDRrankList))
 dim(combineTable_fn(FDRrankList))
 tail(combineTable_fn(FDRrankList))
 
+# Set a function plotting gene ranks between TPM- (x-axis) and Counts-Inputs (y-axis)
 compareRanks_fn <- function(df, rankedby) {
 
 ggplot(df, 
@@ -988,30 +997,85 @@ geom_abline(slope=1, color="black", size=0.5) +
 ggtitle(paste(rankedby, "Ranking witn TPM vs Counts Inputs")) + 
 scale_color_gradient(low="blue", high="red")
 }
-    
+   
+
+# Set a function plotting the rank difference over the gene expression level
+RankdiffOverMean_fn <- function(df, rankedby) {
+
+ggplot(df, 
+       aes(x=logMeanExpression, 
+           y=RankDiff,
+           color=MeanRank)) +
+geom_point(alpha=0.5) + 
+theme_bw() + 
+ylab("Rank Difference (TPM - Counts)") +
+ggtitle(paste("Rank Difference Inputs (TPM - Counts) in", rankedby)) + 
+geom_hline(yintercept=0, color="black", size=0.5) + 
+scale_color_gradient(low="blue", high="red")
+}
 
 ```
 
 
-```{r}
+## Visualizing DEG ranks I: Comparison with TPM- vs Counts-input
+
+- Black diagonal lines: slope = 1 
+
+- Dot color: gene expression level (log-transformed)
+
+```{r comparing_DEGrankI}
 
 
-
-
+# Ranked by FDR
 compareRanks_fn(combineTable_fn(FDRrankList), 
                 "FDR")
 
+# Ranked by absolute fold change 
 compareRanks_fn(combineTable_fn(lfcList), 
                 "Absolute Log2FoldChange")
 
+# Ranked by magnitude of positive fold change
 compareRanks_fn(combineTable_fn(UPlfcList), 
-                "Log2FoldChange (Increase)")
+                "Log2FoldChange (Increased)")
 
+
+# Ranked by magnitude of negative fold change
 compareRanks_fn(combineTable_fn(DOWNlfcList), 
-                "Log2FoldChange (Decrease)")
+                "Log2FoldChange (Decreased)")
 
 ```
 
+
+## Visualizing DEG ranks II: Relationship between gene expression level and rank difference 
+
+- Black diagonal lines: rank difference = 0 
+
+- Dot color: average rank 
+
+
+
+```{r comparing_DEGrankII}
+
+# Ranked by FDR
+RankdiffOverMean_fn(combineTable_fn(FDRrankList), 
+                "FDR")
+
+
+# Ranked by absolute fold change 
+RankdiffOverMean_fn(combineTable_fn(lfcList), 
+                "Absolute Log2FoldChange")
+
+# Ranked by magnitude of positive fold change
+RankdiffOverMean_fn(combineTable_fn(UPlfcList), 
+                "Log2FoldChange (Increased)")
+
+
+# Ranked by magnitude of negative fold change
+RankdiffOverMean_fn(combineTable_fn(DOWNlfcList), 
+                "Log2FoldChange (Decreased)")
+
+
+```
 
 ## Session Info 
 
