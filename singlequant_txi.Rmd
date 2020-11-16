@@ -26,6 +26,7 @@ library(pheatmap)
 library(gridExtra)
 library(ggplotify)
 library(ggrepel)
+library(UpSetR)
 ```
 
 ## Setting AnnotationHub
@@ -875,6 +876,7 @@ for (x in TvC) {
 
 ```{r DEG_statistics}
 
+# Clean data
 type=c("Zero Counts", "Outliers", "Total NA Genes") 
 
 NAstat <- res %>%
@@ -889,12 +891,13 @@ NAstat <- res %>%
                        levels=type))
 
 
-
+# 
 ggplot(NAstat, aes(x=Type, y=Number, group=Input, fill=Input, label=Number)) + 
     geom_bar(stat="identity", position="dodge") + 
     theme_bw() +
-    geom_label_repel() + 
+    geom_text(position=position_dodge(width=1), vjust=-0.5) + 
     ggtitle("Number of NA Genes") 
+
 ```
 
 ## Determining DEG ranks in DE analysis between TPM and original count inputs
@@ -914,7 +917,7 @@ for (x in TvC) {
 
 
     lowfdr_resList[[x]] <- filter(shr_resList[[x]], 
-                                  !is.na(padj), padj < alpha) %>% 
+                                  FDR == FDRv[1]) %>% 
     as.data.table()
 
 
@@ -1077,8 +1080,48 @@ RankdiffOverMean_fn(combineTable_fn(DOWNlfcList),
 
 ```
 
+## Summarizing up/down DEG  
+
+- Calculate the number of genes 
+
+
+```{r upsetplotting}
+
+# Clean data to generate an upset plot
+res <- res %>%
+
+    # Filter genes with valid padj 
+    filter(!is.na(padj)) %>% 
+
+    # Detect genes which are up/down/unchanged change patterns in either TPM and Counts inputs
+    mutate(Up=ifelse(FDR == FDRv[1] & log2FoldChange > 0, Gene, ""), # What are upregulated genes? 
+           Down=ifelse(FDR == FDRv[1] & log2FoldChange < 0, Gene, ""),  # What are downregulated genes? 
+           Unchanged=ifelse(FDR == FDRv[2], Gene, ""),   # What are unchanged genes? 
+           TPM_Input=ifelse(Input == "TPM", Gene, ""),   # What are the genes from TPM input? 
+           Counts_Input=ifelse(Input == "Counts", Gene, ""))   # What are the genes from Counts input?
+
+# Create a list storing groups of interest
+upsetInput <- list(Up=res$Up, 
+                   Down=res$Down, 
+                   Unchanged=res$Unchanged, 
+                   TPM_Input=res$TPM, 
+                   Counts_Input=res$Counts)
+
+# Create the upset plot 
+upset(fromList(upsetInput), 
+      sets.x.label="Number of Genes per Group", 
+      order.by="freq") 
+```
+
+
+
+
+
 ## Session Info 
 
 ```{r sessionInfo}
 sessionInfo()
 ```
+
+
+
