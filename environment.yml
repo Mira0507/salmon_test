@@ -1,0 +1,22 @@
+name: salmon
+channels:
+  - conda-forge
+  - bioconda 
+  - defaults 
+dependencies:
+  - salmon 
+  - r-base =4.0.2
+  - bedtools 
+  - gawk 
+  - r-tidyverse
+  - r-data.table
+  - r-ggplot2
+  - r-markdown
+  - r-upsetr
+  - r-ggrepel
+  - r-ggplotify
+  - r-gridextra
+  - r-pheatmap
+  - bioconductor-deseq2
+  - bioconductor-annotationhub
+  - bioconductor-tximport
