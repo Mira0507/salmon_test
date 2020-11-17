@@ -3,6 +3,16 @@ title: Comparison of TPM and original counts in DE analysis with the DESeq2 pack
 output: html_document
 ---
 
+## Raw data 
+
+- Link: https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE157852
+
+- Study aim: Reveal neurological complications in patients with COVID-19
+
+- Study summary: **Human Pluripotent Stem Cell-Derived Neural Cells and Brain Organoids** were infected with SARS-CoV-2 for 72hrs and analyzed with bulk RNA-seq.
+
+- Samples: **Mock-** or **SARS-CoV-2-**infected neuronal cells 
+
 ```{r global_options, include=FALSE}
 
 knitr::opts_chunk$set(
@@ -11,6 +21,8 @@ knitr::opts_chunk$set(
     )
 
 ```
+
+
 
 ## Loading packages
 
@@ -111,9 +123,6 @@ Contrast <- c("Group", "COVID", "Mock")
 TvC <- c("TPM", "Counts")
 
 
-# Set a directory to save csv files
-dir.create("./csv")
-
 
 # Define .sf file path
 sf <- c(paste0(SampleNames,
@@ -140,18 +149,14 @@ print(metadata)
 
 - txi_counts: stores **original counts** 
 
-- We could alternatively generate counts from abundances, using the argument **countsFromAbundance**, scaled to library size, **"scaledTPM"**, or additionally scaled using the average transcript length, averaged over samples and to library size, **"lengthScaledTPM"**. Using either of these approaches, the counts are not correlated with length, and so the length matrix should not be provided as an offset for downstream analysis packages. For more details on these approaches, see the article listed under citation("tximport").
+- Despite that the TPM matrix is not recommended as an input for DE analysis due to the fact that it doesn't account gene length, TPM stored in a tximport (by **tximport(..., countsFromAbundance="lengthScaledTPM")**) can be used for DE analysis by being inputted with the **DESeqDataSetFromTximport()** funtion in DESeq2 workflow as the gene length is automatically adjusted by DESeqDataSetFromTximport(). 
 
-- If you don't want gene-level summarization, set below argument:
-  **txOut=TRUE**. 
+- In this project, two txi objects were created with or without the countsFromAbundance="lengthScaledTPM" argument and compared in downstream DE analysis. 
 
-- Visit tximport doc: https://bioconductor.riken.jp/packages/3.4/bioc/vignettes/tximport/inst/doc/tximport.html
+- If you don't want gene-level summarization, set **txOut=TRUE**. 
 
+- References: [**tximport doc**](https://bioconductor.riken.jp/packages/3.4/bioc/vignettes/tximport/inst/doc/tximport.html), [**DESeq2 doc "Why unnormalized counts?"**](https://www.bioconductor.org/packages/devel/bioc/vignettes/DESeq2/inst/doc/DESeq2.html#why-un-normalized-counts), [**Soneson et al. 2016**](https://www.ncbi.nlm.nih.gov/pmc/articles/PMC4712774/), [**Developer Dr. Love's comment**](https://support.bioconductor.org/p/84059/), [**Harvard Chan Bioinformatics Core workshop**](https://github.com/hbctraining/DGE_workshop_salmon_online/blob/master/lessons/02_DGE_count_normalization.md)
 
-### Discussion about TPM as an input of DESeq2    
-#### from [Bioinformatics Forum](https://www.biostars.org/p/411259/))    
-
-None of it is ideal. You should start from raw counts if possible. If not and TPM is the only thing you have then what does it matter, results will anyway be unreliable, so interpret them with care and try to validate the important genes with either experiments or published RNA-seq data in a similar setup. Gene length correction down-penalizes counts of long genes and by this reduces its power, this is (from what I understand) why it is not by default done in tools like edgeR or DESeq2. But as said, if TPM is what you have with no alternative, go and try the pipeline suggested at BioC and then see if you get anything out of it. Maybe you already have genes from which you know that they must / should change in your setup, and some that should not, so you can get an idea how robust the results are. You should also think about how drastic you expect changes to be. TPM cannot correct for library composition (see e.g. on Youtube the StatQuest videos on DESeq2 and edgeR library normalization to learn what this is and why it is important to correct for it), so if you expect major changes in the transcriptional landscape like mostly genes being upregulated or vice verse, your TPM counts might be skewed. Again, be careful with the results and try to confirm important genes that you want to build on.
 
 ```{r saving_reads_to_dataframe}
 
@@ -189,17 +194,19 @@ dim(txi_counts$counts)
 ```
 
 
-## Creating an DESeq object from txi and VST
+## Creating DESeq objects from txi and VST
 
 - Note: The tximport-to-DESeq2 approach uses estimated gene counts from the transcript abundance quantifiers, but not normalized counts.
 
-- The **txi input** was used to create a DESeq object (aka **dds**) with **DESeqDataSetFromTximport()** function 
+- The **DESeqDataSetFromTximport()** function generated an DESeq object (aka **dds**) with the **txi input**. 
 
-- **vst()** was run for variance stabilizing transformation instead of rlog which takes longer time with similar characteristics. 
+- **vst()** was run to perform variance stabilizing transformation instead of rlog() which takes longer time with similar characteristics. 
 
 - The **vsd** object created by vst() is used for not DE analysis but QC. 
 
-- Visit DESeq2 doc: http://bioconductor.org/packages/release/bioc/vignettes/DESeq2/inst/doc/DESeq2.html
+-References: [**DESeq2 doc "Transcript abundance files"**](https://www.bioconductor.org/packages/devel/bioc/vignettes/DESeq2/inst/doc/DESeq2.html#tximport), [**DESeq2 doc "Variance stabilizing transformation"**](https://www.bioconductor.org/packages/devel/bioc/vignettes/DESeq2/inst/doc/DESeq2.html#variance-stabilizing-transformation)
+
+
 
 
 ```{r creating_dds_vsd}
@@ -256,17 +263,19 @@ Counts[[2]]
 ```
 
 
-## Estimating size factors, dispersions, and conducting the Wald Test
+## Estimating size factors, dispersions, and conducting Wald Test
 
-- **Dispersion** is calculated as a **measure of variation** instead of variance as variance gets larger when gene expression gets higher. 
+- **Dispersion** is calculated as a **measure of variation** instead of variance since variance gets larger when gene expression gets higher. 
 
-- **Wald test** is the default setting of DESeq2 testing null hypothesis when you compare **two groups**. Use **Likelihood ratio test (LRT)** when you have compare **more than two groups**.     
+- **Wald test** is the default setting of DESeq2 which tests null hypothesis between **two groups**. You should use **Likelihood ratio test (LRT)** when comparing **more than two groups**.     
 
-- Message when "Counts <- DESeqPrep_fn(Counts)" was run:       
+- Messages when "Counts <- DESeqPrep_fn(Counts)" was run:       
 using **'avgTxLength'** from assays(dds), correcting for library size
 gene-wise dispersion estimates
 mean-dispersion relationship
 final dispersion estimates
+
+- References: [**Harvard Chan Bioinformatics Core workshop I**](https://github.com/hbctraining/DGE_workshop_salmon_online/blob/master/lessons/05b_wald_test_results.md)[**Harvard Chan Bioinformatics Core workshop II**](https://github.com/hbctraining/DGE_workshop_salmon_online/blob/master/lessons/05a_hypothesis_testing.md), [**Harvard Chan Bioinformatics Core workshop III**](https://github.com/hbctraining/DGE_workshop_salmon_online/blob/master/lessons/04b_DGE_DESeq2_analysis.md), [**DESeq2 "Wald test indivisual steps**](https://www.bioconductor.org/packages/devel/bioc/vignettes/DESeq2/inst/doc/DESeq2.html#wald-test-individual-steps), [**DESeq2 doc "Likelihood ratio test"**](https://www.bioconductor.org/packages/devel/bioc/vignettes/DESeq2/inst/doc/DESeq2.html#likelihood-ratio-test)
 
 ```{r DESeq_prep}
 
@@ -346,6 +355,12 @@ ggplot(sizeFactor, aes(x=Sample,
 
 - Blue dashed line: normalization factor = 1
 
+- Colored **dots**: **normlization factors per gene** (y-axis) in each sample 
+
+- Box plots: distribution of the normalization facters in each group (see the second plot)
+
+- Reference: [**DESeq2 doc "Sample-/gene-dependent normalization factors"**](https://www.bioconductor.org/packages/devel/bioc/vignettes/DESeq2/inst/doc/DESeq2.html#log-fold-change-shrinkage-for-visualization-and-ranking)
+
 
 ```{r plotting_normalizationfactors}
 
@@ -358,7 +373,7 @@ normf$Sample <- factor(normf$Sample, levels=SampleNames)
 normf$Group <- factor(normf$Group, levels=GroupLevel)
 
 # Create a scatter plot showing distribution of normalization factors 
-ggplot(normf, 
+normFactors_plot <- ggplot(normf, 
        aes(x=Sample, y=Normalization_Factor)) + 
 geom_jitter(alpha=0.5, aes(color=Group)) + 
 
@@ -376,14 +391,26 @@ geom_hline(yintercept=1,
            color="blue", 
            linetype="dashed")
 
+# Print the normalization factor scatter plot 
+print(normFactors_plot)
+
+# Print the same plot with larger y-magnification in order to observe the box plot 
+normFactors_plot + 
+    ylim(0.5, 1.5)
 
 
 
 
 ```
 
+### Results & Discussion 1: 
+
+#### - Patterns of the size factors (from TPM) and the normalization factors per gene (from Counts) by sample were similar in terms of magnitude   
+
 
 ## Setting functions for QC plots
+
+- Reference: [**DESeq2 doc "Principal component plot of the samples"**](https://www.bioconductor.org/packages/devel/bioc/vignettes/DESeq2/inst/doc/DESeq2.html#principal-component-plot-of-the-samples), [**DESeq2 doc "Heatmap of the sample-to-sample distances"**](https://www.bioconductor.org/packages/devel/bioc/vignettes/DESeq2/inst/doc/DESeq2.html#heatmap-of-the-sample-to-sample-distances)
 
 ```{r QCplot_functions}
 
@@ -445,7 +472,11 @@ grid.arrange(QCPCA_fn(TPM, "QC PCA: TPM"),
 
 ## Sample QC: Sample Correlation Heatmap
 
-- Checkpoint of correlation heatmap: distance between samples, correlation in a group
+- Checkpoints of correlation heatmap: distance between samples, correlation in a group
+
+- Upper: TPM input
+
+- Lower: Counts input
 
 ```{r QC_correlation_heatmap}
 
@@ -457,6 +488,11 @@ QCcorrHeatmap_fn(Counts, "Counts")
 
 
 ```
+
+### Results & Discussion 2: 
+
+#### - Unsupervised learning-mediated sample QC resulted in highly similar patterns between TPM and Counts 
+
 
 ## Running DE analysis
 
@@ -477,9 +513,11 @@ for (x in TvC) {
 
 ```
 
-## Creating a dispersion plot
+## Creating dispersion plots
 
-- Dispersion is important since estimation by DESeq2 algorithm is based on the assumption that genes with similar expression levels have similar dispersion. If an RNA-seq dataset doesn't satisfy this assumption, use other DE algorithm than DESeq2. 
+- Dispersion is important since estimation by DESeq2 algorithm is based on the assumption that genes with similar expression levels have similar dispersion. If an RNA-seq dataset doesn't satisfy this assumption, use other DE algorithms than DESeq2. 
+
+- References: [**DESeq2 doc "Dispersion plot and fitting alternatives**](https://www.bioconductor.org/packages/devel/bioc/vignettes/DESeq2/inst/doc/DESeq2.html#dispersion-plot-and-fitting-alternatives), [**Harvard Chan Bioinformatics Core workshop **](https://github.com/hbctraining/DGE_workshop_salmon_online/blob/master/lessons/04b_DGE_DESeq2_analysis.md)
 
 
 ```{r dispersion_plot}
@@ -497,16 +535,25 @@ for (x in TvC) {
 
 ```
 
+### Results & Discussion 3:
+
+#### - Both inputs gave a goot fit
+
+#### - No major difference was seen in the dispersion plots between two conditions 
+
 
 ## Performing shrinkage 
 
-- Shrinkage is beneficial to reduce false positives
+- Shrinkage reduces false positives
 
 - Magnitude of shrinkage is affected by dispersion and sample size
 
-- When the **type** is set to **"apeglm"**, the **coef** argument is used instead of constrast. In this dataset, you can set **coef=Coef** where **Coef <- resultsNames(ddsList[[1]])**. 
+- When the argument **type** is set to **"apeglm"**, the **coef** argument is used instead of constrast. In this dataset, you can set **coef=Coef** where **Coef <- resultsNames(ddsList[[1]])**. 
 
-- When the **type** is set to **"normal"**, the **contrast** is set as shown below. 
+- When the **type** is set to **"normal"**, the argument **contrast** is set as shown below. 
+
+- References: [**DESeq2 doc "Alternative shrinkage estimators"**](https://www.bioconductor.org/packages/devel/bioc/vignettes/DESeq2/inst/doc/DESeq2.html#alternative-shrinkage-estimators), [**Harvard Chan Bioinformatics Core workshop **](https://github.com/hbctraining/DGE_workshop_salmon_online/blob/master/lessons/04b_DGE_DESeq2_analysis.md)
+
 
 
 ```{r shrinkage}
@@ -530,7 +577,7 @@ for (x in TvC) {
 
 - The **alpha** denotes threshold of **false discovery rate (FDR)** assigned by users.
 
-- In this analysis, alpha is set to 0.1 
+- In this analysis, the alpha is set to **0.1** 
 
 
 ```{r extracting_log2FoldChanges}
@@ -601,7 +648,8 @@ head(shr_resList[['Counts']])
 
 ## Exploring mean-difference relationship with MA plots
 
-- Red dashed lines: log2FoldChange = -1 and 1
+- Reference: [**DESeq2 doc "MA-plot"**](https://www.bioconductor.org/packages/devel/bioc/vignettes/DESeq2/inst/doc/DESeq2.html#ma-plot)
+
 
 ```{r MAplot}
 
@@ -638,18 +686,20 @@ shr_MA <- MA_fn(shr_resList, "Shrinkage")
 
 ```
 
-## Visualizing MA plots
+## Displaying MA plots
 
-- **x-axis**: expression level 
+- **x-axis**: expression level (baseMean))
 
 - **y-axis**: fold change (log2FoldChange)
 
-- **Upper**: TPM with (left) or without (right) shrinkage
+- Red dashed lines: log2FoldChange = -1 and 1
 
-- **Lower**: Counts with (left) or without (right) shrinkage
+- **Upper**: **TPM** with (right) or without (left) shrinkage
+
+- **Lower**: **Counts** with (right) or without (left) shrinkage
 
 
-```{r presenting_MAplots}
+```{r displaying_MAplots}
 
 # TPM with or without shrinkage
 grid.arrange(MA[[1]], shr_MA[[1]], nrow=1)
@@ -659,13 +709,20 @@ grid.arrange(MA[[2]], shr_MA[[2]], nrow=1)
 
 ```
 
+### Results & Discussion 4: 
+
+#### - Both inputs gave fairly identical MA plots
 
 
 ## Exploring distribution of false discovery rate (FDR)
 
 - Only the **shrunken results** are taken for further analysis
 
-- Distribution of adjusted p-val was presented by input type
+- Distribution of adjusted p-val (FDR) was presented 
+
+- **x-axis**: FDR
+
+- **y-axis**: Number of genes
 
 - Black dashed line: FDR = 0.1
 
@@ -689,13 +746,19 @@ geom_vline(xintercept=alpha,
            linetype="dashed",
            size=1) + 
 scale_x_continuous(breaks=seq(0, 1, by=0.1)) 
+
 ```
+
+### Results & Discussion 5:
+
+#### - Both inputs showed highly similar FDR distribution patterns across the FDR range.  
+#### - When the FDR > 0.7, more genes were counted in the TPM input than in the Counts. 
 
 ## Volcano plots
 
-- **x-axis**: expression level
+- **x-axis**: expression level (log2FoldChange)
 
-- **y-axis**: log odds (larger log odds = more promising) 
+- **y-axis**: log odds (larger log odds = more promising genes) 
 
 - Red dashed lines: log2FoldChange = -1 and 1 
 
@@ -718,7 +781,7 @@ facet_grid(.~Input) +
 theme_bw() +
 scale_color_manual(values=c("blue", "grey")) + 
 ggtitle("Volcano Plot") + 
-ylab("-log10(FDR)") + 
+ylab("-log10(padj)") + 
 theme(strip.text.x=element_text(size=12)) + 
 geom_vline(xintercept=c(mLog[1], mLog[2]), 
            color="red", 
@@ -756,10 +819,18 @@ Volcano_fn(res, Label=res$Label) + geom_text_repel(color="black")
 ```
 
 
+### Results & Discussion 6: 
+
+#### - Both inputs gave nearly identical volcano plots 
+
 
 ## Exploring distribution of log2FoldChange by input type
 
 - Black dashed lines: log2FoldChange = -1 and 1 
+
+- **x-axis**: gene expression level (log2FoldChange) 
+
+- **y-axis**: number of genes 
 
 ```{r L2FC_distribution}
 
@@ -781,19 +852,24 @@ xlim(xlim[1], xlim[2])
 
 ```
 
+### Results & Discussion 7: 
+
+#### - Both inputs showed nearly identical fold change distribution
 
 
-## Exploring expression profiling 
+## Exploring expression profiling with normalized count data
 
-- Normalized count matrices are extracted from dds objects and cleaned with thresholds set at FDR and log2FoldChange
+- Normalized count matrices are extracted from dds objects and filtered with thresholds set at FDR and log2FoldChange
 
-- The heatmaps display z-scores instead of the normalized counts
+- The heatmaps display **z-scores** of the normalized counts
 
-- **lowfdrList**: a list of matrices filtered with **FDR < alpha**
+- **lowfdrList**: a list of matrices filtered by **FDR < alpha**
 
-- **highfoldList**: a list of matrices filtered with **FDR < alpha** AND **absolute log2FoldChange > user's minimum threshold (mLog)**
+- **highfoldList**: a list of matrices filtered by **FDR < alpha** AND **absolute log2FoldChange > user's minimum threshold (mLog)**
 
-- In this analysis, mLog was set to 1
+- In this analysis, **mLog = 1**
+
+- References: [**Harvard Chan Bioinformatics Core workshop**](https://github.com/hbctraining/DGE_workshop_salmon_online/blob/master/lessons/06_DGE_visualizing_results.md), [**DESeq2 doc "Heatmap of the count matrix"**](https://www.bioconductor.org/packages/devel/bioc/vignettes/DESeq2/inst/doc/DESeq2.html#heatmap-of-the-count-matrix)
 
 ```{r transcription_profiling}
 
@@ -863,20 +939,28 @@ for (x in TvC) {
 }
 ```
 
+### Results & Discussion 8: 
+
+#### - No major difference is seen bewteen the TPM and Counts 
+
+
+
 ## NA statistics: zero count genes & outlier genes  
 
 
-### When NAs appear in  
+#### When NAs appear in  
 
 - **log2FoldChange**: zero counts in all samples
+
 - **padj**: too little information 
+
 - **pval & padj**: at least one replicate was an outlier 
 
 
 
 ```{r DEG_statistics}
 
-# Clean data
+# Count number of NA genes  
 type=c("Zero Counts", "Outliers", "Total NA Genes") 
 
 NAstat <- res %>%
@@ -891,21 +975,32 @@ NAstat <- res %>%
                        levels=type))
 
 
-# 
+# Plot number of NA genes 
 ggplot(NAstat, aes(x=Type, y=Number, group=Input, fill=Input, label=Number)) + 
     geom_bar(stat="identity", position="dodge") + 
     theme_bw() +
-    geom_text(position=position_dodge(width=1), vjust=-0.5) + 
-    ggtitle("Number of NA Genes") 
+    geom_text(position=position_dodge(width=1), vjust=1.5) + 
+    ggtitle("Number of NA Genes") + 
+    ylab("Number of Genes")
 
 ```
 
-## Determining DEG ranks in DE analysis between TPM and original count inputs
+### Results & Discussion 9: 
+
+#### - Both inputs produced no major difference in the number of NA genes
+
+
+
+
+## Ranking DEGs with the TPM and original count inputs
 
 - **FDRrankList**: ranked by FDR
+
 - **lfcList**: ranked by absolute fold change 
-- **UPlfcList**: ranked by magnitude of increase fold change  
-- **DOWNlfcList**: ranked by manitude of decrease fold change 
+
+- **UPlfcList**: ranked by magnitude of fold change increase 
+
+- **DOWNlfcList**: ranked by manitude of fold change decrease
 
 
 ```{r determining_DEGrank}
@@ -960,7 +1055,7 @@ print(c(FDRrankList, lfcList, UPlfcList, DOWNlfcList))
 
 ```
 
-## Comparing DEG ranks between TPM- and Counts-input DE analysis 
+## Comparing DEG ranks between TPM- and Counts-inputted DE analysis 
 
 
 
@@ -1020,11 +1115,15 @@ scale_color_gradient(low="blue", high="red")
 ```
 
 
-## Visualizing DEG ranks I: Comparison with TPM- vs Counts-input
+## Visualizing DEG ranks I: TPM- vs Counts-input
 
-- Black diagonal lines: slope = 1 
+- **x-axis**: rank with TPM input
 
-- Dot color: gene expression level (log-transformed)
+- **y-axis**: rank with Counts input 
+
+- Black diagonal lines: rank with TPM = rank with Counts 
+
+- Dot color: gene expression level (log-baseMean)
 
 ```{r comparing_DEGrankI}
 
@@ -1048,10 +1147,22 @@ compareRanks_fn(combineTable_fn(DOWNlfcList),
 
 ```
 
+### Results & Discussion 10: 
+
+#### - FDR ranking (top): Genes with high expression levels (red dots) were ranked similarly between two input types which is close to the black diagonal line. Ranking dissimilarity increased in lower ranking ranges (250-500).
+
+#### - Absolute fold ranking (2nd top): Genes were ranked higher as their expression levels were lower (blue to purple dots). Genes with high expression levels (red dots) showed less difference in the rankings which is close to the black diagonal line. 
+
+#### - Decrease/increase fold ranking (bottom/2nd botton): Highly expressed genes (red dots) showed middle-rankings (150-350). Low-ranking genes tended to be ranked higher with TPM than with Counts as the slope was higher than 1 which is indicated by the black diagonal line.   
+
 
 ## Visualizing DEG ranks II: Relationship between gene expression level and rank difference 
 
-- Black diagonal lines: rank difference = 0 
+- **x-axis**: expression level (log-baseMean)
+
+- **y-axis**: rank difference (rank with TPM - rank with Counts)
+
+- Black horizontal lines: rank with TPM = rank with Counts 
 
 - Dot color: average rank 
 
@@ -1080,7 +1191,17 @@ RankdiffOverMean_fn(combineTable_fn(DOWNlfcList),
 
 ```
 
-## Summarizing up/down DEG  
+
+### Results & Discussion 11: 
+
+#### - Difference in FDR ranking (top): High-ranking genes (blue dots) showed less difference. Genes with high expression levels (higher x-values) showed less difference. 
+
+#### - Difference in absolute/increase fold ranking (2nd top/2nd bottom): Low mean ranks (red dots) seemed to be coupled with higher ranking with TPM (negative y-values) than that with Counts while high mean ranks (purple to blue dots) seemed vice versa or random. 
+
+#### - Difference in decrease fold ranking (bottom): Low-to-middle ranking genes (red-purple dots) tended to have higher ranking with TPM (negative y-values) whereas high ranking genes (blue dots) showed higher ranking with Counts (positive y-values)
+
+
+## Summarizing up/down DEGs with an upset plot 
 
 - Calculate the number of genes 
 
