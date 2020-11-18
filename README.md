@@ -21,6 +21,12 @@ R code for extracting counts from .sf files and performing downstream DE analysi
 **6. singlequant_counts.html**   
 An html file rendered from singlequant_counts.Rmd 
 
-**7. workflow.md**   
+**7. singlequant_txi.Rmd**   
+R code for conducting DE analysis with txi input in DESeq2 pipeline 
+
+**8. singlequant_txi.html**   
+An html file rendered from singlequant_txi.Rmd
+
+**9. workflow.md**   
 Entire workflow from raw data to downstream analysis
 
