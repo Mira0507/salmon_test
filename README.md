@@ -27,6 +27,9 @@ R code for conducting DE analysis with txi input in DESeq2 pipeline
 **8. singlequant_txi.html**   
 An html file rendered from singlequant_txi.Rmd
 
-**9. workflow.md**   
+**9. singlelquant_txi_plots.Rmd**   
+R code for saving plots in DE analysis with txi input in DESeq2 pipeline
+
+**10. workflow.md**   
 Entire workflow from raw data to downstream analysis
 
