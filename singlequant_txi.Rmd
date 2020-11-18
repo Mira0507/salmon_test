@@ -14,12 +14,10 @@ output: html_document
 - Samples: **Mock-** or **SARS-CoV-2-**infected neuronal cells 
 
 ```{r global_options, include=FALSE}
-
 knitr::opts_chunk$set(
     warning=FALSE,
     message=FALSE
     )
-
 ```
 
 
@@ -46,18 +44,14 @@ library(UpSetR)
 Assign your species of interest
 
 ```{r annotationhub_setup}
-
 AnnotationSpecies <- "Homo sapiens"  # Assign your species 
 ah <- AnnotationHub(hub=getAnnotationHubOption("URL"))   # Bring annotation DB
-
 ```
 
 ## Running AnnotationHub 
 
 ```{r run_annotationhub}
-
 ahQuery <- query(ah, c("OrgDb", AnnotationSpecies))      # Filter annotation of interest
-
 if (length(ahQuery) == 1) {
     DBName <- names(ahQuery)
 } else if (length(ahQuery) > 1) {
@@ -66,34 +60,27 @@ if (length(ahQuery) == 1) {
     print("You don't have a valid DB")
     rmarkdown::render() 
 } 
-
 AnnoDb <- ah[[DBName]] # Store into an OrgDb object  
-
-
 # Explore your OrgDb object with following accessors:
 # columns(AnnpDb)
 # keytypes(AnnoDb)
 # keys(AnnoDb, keytype=..)
 # select(AnnoDb, keys=.., columns=.., keytype=...)
 AnnoKey <- keys(AnnoDb, keytype="ENSEMBLTRANS")
-
 # Note: Annotation has to be done with not genome but transcripts 
 AnnoDb <- select(AnnoDb, 
                  AnnoKey,
                  keytype="ENSEMBLTRANS",
                  columns="SYMBOL")
-
 ```
 
 
 ## Checking out the AnnotationHub output 
 
 ```{r checking_annotationhub_output}
-
 # Check if your AnnoDb has been extracted and saved correctely
 class(AnnoDb)
 head(AnnoDb)
-
 ```
 
 ## Defining file name and path for .sf files
@@ -102,9 +89,7 @@ head(AnnoDb)
 
 
 ```{r preparing_importing.sf}
-
 # This code chunk needs to be written by yourself 
-
 # Define sample names 
 SampleNames <-  c("Mock_72hpi_S1",
                  "Mock_72hpi_S2",
@@ -112,33 +97,22 @@ SampleNames <-  c("Mock_72hpi_S1",
                  "SARS-CoV-2_72hpi_S7",
                  "SARS-CoV-2_72hpi_S8",
                  "SARS-CoV-2_72hpi_S9") 
-
 # Define group level
 GroupLevel <- c("Mock", "COVID")
-
 # Define contrast for DE analysis
 Contrast <- c("Group", "COVID", "Mock")
-
 # Define a vector for comparing TPM vs Counts effect 
 TvC <- c("TPM", "Counts")
-
-
-
 # Define .sf file path
 sf <- c(paste0(SampleNames,
                ".fastq.gz.salmon_quant/quant.sf"))
-
 # Define sample groups
 group <- c(rep("Mock", 3), rep("COVID", 3))
-
 # Create metadata
 metadata <- data.frame(Sample=factor(SampleNames, levels=SampleNames),
                        Group=factor(group, levels=GroupLevel),
                        Path=sf)
-
 rownames(metadata) <- SampleNames
-
-
 # Explore the metadata
 print(metadata)
 ```
@@ -159,10 +133,8 @@ print(metadata)
 
 
 ```{r saving_reads_to_dataframe}
-
 # Assign sample names to the input (.sf) file path
 names(sf) <- SampleNames
-
 # Run tximport
 # tpm vs original counts
 # input sf: a factor of all .sf files' path
@@ -171,26 +143,21 @@ txi_tpm <- tximport(sf,
                     tx2gene=AnnoDb,
                     countsFromAbundance="lengthScaledTPM", # Extracts TPM 
                     ignoreTxVersion=T) 
-
 txi_counts <- tximport(sf, 
                     type="salmon",
                     tx2gene=AnnoDb,
                     ignoreTxVersion=T) 
-
 ```
 
 ## Exploring the txi outputs 
 
 ```{r txi_outputs}
-
 # tpm 
 head(txi_tpm$counts)
 dim(txi_tpm$counts)
-
 # counts
 head(txi_counts$counts)
 dim(txi_counts$counts)
-
 ```
 
 
@@ -210,41 +177,31 @@ dim(txi_counts$counts)
 
 
 ```{r creating_dds_vsd}
-
 # Set a function creating dds and vsd
 dds_vsd_fn <- function(txi) { 
-
     # Create a DESeq object (so-calledd dds) 
     des <- DESeqDataSetFromTximport(txi, 
                                     colData=metadata,
                                     design=~Group)
-
     # Create a vsd object (so-called vsd) 
     ves <- vst(des, blind=T)
-
     # Output them as a list 
     return(list(dds=des, vsd=ves))
 }
-
 TPM <- dds_vsd_fn(txi_tpm)
 Counts <- dds_vsd_fn(txi_counts)
-
 # Outputs
 # dds: TPM/Counts[[1]] or TPM/Counts[['dds']] 
 # vsd: TPM/Counts[[2]] or TPM/Counts[['vsd']]
-
 ```
 
 
 ## Exploring created dds 
 
 ```{r exploring_dds}
-
 # TPM 
 TPM[[1]]
 head(counts(TPM[[1]]))
-
-
 # Counts
 Counts[[1]]
 head(counts(Counts[[1]]))
@@ -253,11 +210,8 @@ head(counts(Counts[[1]]))
 ## Exploring created vsd
 
 ```{r exploring_vsd}
-
 # TPM
 TPM[[2]]
-
-
 # Counts
 Counts[[2]]
 ```
@@ -278,8 +232,6 @@ final dispersion estimates
 - References: [**Harvard Chan Bioinformatics Core workshop I**](https://github.com/hbctraining/DGE_workshop_salmon_online/blob/master/lessons/05b_wald_test_results.md)[**Harvard Chan Bioinformatics Core workshop II**](https://github.com/hbctraining/DGE_workshop_salmon_online/blob/master/lessons/05a_hypothesis_testing.md), [**Harvard Chan Bioinformatics Core workshop III**](https://github.com/hbctraining/DGE_workshop_salmon_online/blob/master/lessons/04b_DGE_DESeq2_analysis.md), [**DESeq2 "Wald test indivisual steps**](https://www.bioconductor.org/packages/devel/bioc/vignettes/DESeq2/inst/doc/DESeq2.html#wald-test-individual-steps), [**DESeq2 doc "Likelihood ratio test"**](https://www.bioconductor.org/packages/devel/bioc/vignettes/DESeq2/inst/doc/DESeq2.html#likelihood-ratio-test)
 
 ```{r DESeq_prep}
-
-
 # Set a function estimating size factors, dispersions, and perform wald test
 DESeqPrep_fn <- function(List) {
     
@@ -289,30 +241,22 @@ DESeqPrep_fn <- function(List) {
    
     return(List)
 }
-
 # Update dds with the function
 Counts <- DESeqPrep_fn(Counts) 
 TPM <- DESeqPrep_fn(TPM)
-
-
 ```
 
 ## Exploring size factors
 
 ```{r exploring_sizefactors}
-
-
 sizeFactors(Counts[[1]])
 sizeFactors(TPM[[1]])
-
 # Size factors don't exist in the Counts dds!
 # Normalization factors are calculated in the Counts dds instead! 
 assays(Counts[[1]])
 assays(TPM[[1]])
-
 colData(Counts[[1]])
 colData(TPM[[1]])
-
 ```
 
 ## Plotting the size factors in TPM
@@ -321,20 +265,12 @@ colData(TPM[[1]])
 
 
 ```{r plotting_sizefactors}
-
-
 # Extract and save the size factors in a data frame
 sizeFactor <- as.data.frame(round(sizeFactors(TPM[[1]]), 3))
-
 colnames(sizeFactor) <- 'Size_Factor'
 sizeFactor <- sizeFactor %>%
     rownames_to_column(var="Sample") %>%
     inner_join(metadata[, 1:ncol(metadata)-1], by="Sample") 
-
-dir.create("Plots")
-
-jpeg(file="Plots/sizefactors.jpeg", width=800, height=800, res=150)
-
 # Create a plot comparing the size factors by sample
 ggplot(sizeFactor, aes(x=Sample, 
                        y=Size_Factor, 
@@ -347,9 +283,6 @@ ggplot(sizeFactor, aes(x=Sample,
     theme(axis.text.x=element_text(angle=45, 
                                    vjust=0.5)) + ylab("Size Factor")
     
-
-dev.off()
-
 ```
 
 
@@ -367,22 +300,16 @@ dev.off()
 
 
 ```{r plotting_normalizationfactors}
-
 # Extract and normalization factors in a data frame
 normf <- as.data.frame(normalizationFactors(Counts[[1]])) %>%
     gather(Sample, Normalization_Factor) %>%
     inner_join(metadata[, 1:2], by="Sample") 
-
 normf$Sample <- factor(normf$Sample, levels=SampleNames)
 normf$Group <- factor(normf$Group, levels=GroupLevel)
-
-
-
 # Create a scatter plot showing distribution of normalization factors 
 normFactors_plot <- ggplot(normf, 
        aes(x=Sample, y=Normalization_Factor)) + 
 geom_jitter(alpha=0.5, aes(color=Group)) + 
-
 # Add a boxplot to provide statistics in each sample
 geom_boxplot(aes(x=Sample, y=Normalization_Factor), 
              outlier.shape=NA) + 
@@ -391,25 +318,15 @@ ggtitle("Normalization Factors in Counts-DESeq") +
 theme(axis.text.x=element_text(angle=45, 
                                vjust=0.5)) + 
 ylab("Normalization Factor / Gene") +
-
 # Add a dashed horizontal line to indicate where normalization factor=1
 geom_hline(yintercept=1, 
            color="blue", 
            linetype="dashed")
-
 # Print the normalization factor scatter plot 
-jpeg(file="Plots/normfactors.jpeg", width=800, height=800, res=150)
 print(normFactors_plot)
-dev.off()
-
 # Print the same plot with larger y-magnification in order to observe the box plot 
-jpeg(file="Plots/normfactors_largemag.jpeg", width=800, height=800, res=150)
 normFactors_plot + 
     ylim(0.5, 1.5)
-dev.off()
-
-
-
 ```
 
 ### Results & Discussion 1: 
@@ -422,33 +339,24 @@ dev.off()
 - Reference: [**DESeq2 doc "Principal component plot of the samples"**](https://www.bioconductor.org/packages/devel/bioc/vignettes/DESeq2/inst/doc/DESeq2.html#principal-component-plot-of-the-samples), [**DESeq2 doc "Heatmap of the sample-to-sample distances"**](https://www.bioconductor.org/packages/devel/bioc/vignettes/DESeq2/inst/doc/DESeq2.html#heatmap-of-the-sample-to-sample-distances)
 
 ```{r QCplot_functions}
-
 # Assigne what to compare
 GroupOfInterest <- Contrast[1] 
-
 # Set a function for a PCA plot
 QCPCA_fn <- function(inputList, Title) {
-
     plotPCA(inputList[[2]],    # takes vsd
             intgroup=GroupOfInterest) + theme_bw() + ggtitle(Title)
-
 }
-
 # Set heatmap annotation 
 ColOfInterest <- !colnames(metadata) %in% c("Sample", "Path")
 HeatmapAnno <- as.data.frame(metadata[, ColOfInterest])
 rownames(HeatmapAnno) <- SampleNames
 colnames(HeatmapAnno) <- colnames(metadata)[ColOfInterest]
-
 # Set a function for a correlation heatmap 
 QCcorrHeatmap_fn <- function(inputList, Title) {
-
     # Extract transformed count matrix
     mtx <- assay(inputList[[2]])      # takes vsd
-
     # Calculate correlation and store in the matrix
     mtx <- cor(mtx)
-
     
     
     # Create a correlation heatmap
@@ -456,9 +364,7 @@ QCcorrHeatmap_fn <- function(inputList, Title) {
              annotation=HeatmapAnno,
              main=paste("Sample Correlation Heatmap:",
                         Title)))
-
 }
-
 ```
 
 
@@ -469,15 +375,9 @@ QCcorrHeatmap_fn <- function(inputList, Title) {
 
 
 ```{r QC_PCA}
-
-
-jpeg(file="Plots/samplePCA.jpeg", width=800, height=800, res=150)
 grid.arrange(QCPCA_fn(TPM, "QC PCA: TPM"), 
              QCPCA_fn(Counts, "QC PCA: Counts"), 
              nrow=2)
-
-dev.off()
-
 ```
 
 
@@ -492,20 +392,10 @@ dev.off()
 - Lower: Counts input
 
 ```{r QC_correlation_heatmap}
-
-jpeg(file="Plots/corheatmap_tpm.jpeg", width=1000, height=800, res=150)
 # TPM
 QCcorrHeatmap_fn(TPM, "TPM") 
-dev.off()
-
-
-
-jpeg(file="Plots/corheatmap_counts.jpeg", width=1000, height=800, res=150)
 # Counts
 QCcorrHeatmap_fn(Counts, "Counts") 
-dev.off()
-
-
 ```
 
 ### Results & Discussion 2: 
@@ -517,19 +407,13 @@ dev.off()
 
 
 ```{r DE_analysis}
-
 # Create a list for TPM and Counts dds 
 ddsList <- list(TPM=TPM[[1]], Counts=Counts[[1]]) 
-
 for (x in TvC) {
-
     # Run DESeq() 
     ddsList[[x]] <- DESeq(ddsList[[x]])
     print(resultsNames(ddsList[[x]]))
 }
-
-
-
 ```
 
 ## Creating dispersion plots
@@ -540,22 +424,13 @@ for (x in TvC) {
 
 
 ```{r dispersion_plot}
-
-
 # Plot dispersion  
-
 for (x in TvC) {
-
-    jpeg(file=paste0("Plots/dispersion_", x, ".jpeg"), 
-         width=1000, height=800, res=150)
     plotDispEsts(ddsList[[x]], 
                  ylab="Dispersion", 
                  xlab="Mean of Normalized Counts", 
                  main=paste("Dispersion of", x, "Input"))
-    dev.off()
-
 }
-
 ```
 
 ### Results & Discussion 3:
@@ -580,19 +455,14 @@ for (x in TvC) {
 
 
 ```{r shrinkage}
-
 # Create an empty list for shrunken dds
 shr_ddsList <- list(TPM=c(), Counts=c()) 
-
 for (x in TvC) {
-
     # shrink
     shr_ddsList[[x]] <- lfcShrink(ddsList[[x]], 
                                   contrast=Contrast, # contrast  
                                   type="normal")     # is paired with "normal" type
 }
-
-
 ```
 
 
@@ -604,49 +474,34 @@ for (x in TvC) {
 
 
 ```{r extracting_log2FoldChanges}
-
 # Set FDR threshold 
 alpha=0.1 
-
 # FDR threshold vector
 FDRv=c("< 0.1", "> 0.1") 
-
 # Set a function cleaning table
 Sig_fn <- function(df, Input) {
-
     df <- df %>% 
         rownames_to_column(var="Gene") %>%
         mutate(FDR=ifelse(padj < 0.1 & !is.na(padj), 
                                    FDRv[1], 
                                    FDRv[2]), 
                Input=Input) 
-
     return(df)
 }
-
-
 # Initialize lists of result tables with (resList) or without (shr_resList) shrinkage
 resList <- ddsList 
-
 shr_resList <- ddsList  
-
 for (x in TvC) {
-
-
     # Extract results
     resList[[x]] <- as.data.frame(results(ddsList[[x]], 
                                           contrast=Contrast, 
                                           alpha=alpha))
-
     shr_resList[[x]] <- as.data.frame(shr_ddsList[[x]])
-
     # clean the data frame
     resList[[x]] <- Sig_fn(resList[[x]], x)
     shr_resList[[x]] <- Sig_fn(shr_resList[[x]], x)
     
 }
-
-
 ```
 
 
@@ -655,17 +510,14 @@ for (x in TvC) {
 
 
 ```{r exploring_foldtable}
-
 # No shrinkage summary
 summary(resList)
 head(resList[['TPM']])
 head(resList[['Counts']])
-
 # Shrinkage summary
 summary(shr_resList)
 head(shr_resList[['TPM']])
 head(shr_resList[['Counts']])
-
 ```
 
 
@@ -675,38 +527,25 @@ head(shr_resList[['Counts']])
 
 
 ```{r MAplot}
-
 # Set ylim: has to adjusted by users depending on data 
 yl <- c(-20, 20)
-
 # Set min log2 fold change of interest 
 mLog <- c(-1, 1)
-
 # Define a function creating an MA plot
 MA_fn <- function(List, Shr) {
-
     MAList <- ddsList 
-
     for (i in 1:2) {
-
         MAplot <- ggplot(List[[i]], 
                          aes(x=baseMean,
                              y=log2FoldChange,
                              color=FDR)) + geom_point() + scale_x_log10() + theme_bw() + scale_color_manual(values=c("blue", "grey")) + ggtitle(paste("MA plot:", names(List)[i], "Input with", Shr)) + ylim(yl[1], yl[2])+ geom_hline(yintercept=c(mLog[1], mLog[2]), linetype="dashed", color="red")
-
         MAList[[i]] <- MAplot
-
     }
-
     return(MAList)
-
 }
-
-
 # Create MA plots with or without shrinkage and store in a list
 MA <- MA_fn(resList, "No Shrinkage")
 shr_MA <- MA_fn(shr_resList, "Shrinkage")
-
 ```
 
 ## Displaying MA plots
@@ -723,17 +562,10 @@ shr_MA <- MA_fn(shr_resList, "Shrinkage")
 
 
 ```{r displaying_MAplots}
-
 # TPM with or without shrinkage
-jpeg(file="Plots/shrinkage_TPM.jpeg", width=1200, height=800, res=150)
 grid.arrange(MA[[1]], shr_MA[[1]], nrow=1)
-dev.off()
-
-
-# Counts with or without shrinkage
-jpeg(file="Plots/shrinkage_counts.jpeg", width=1200, height=800, res=150)
+# TPM with or without shrinkage
 grid.arrange(MA[[2]], shr_MA[[2]], nrow=1)
-dev.off()
 ```
 
 ### Results & Discussion 4: 
@@ -754,14 +586,10 @@ dev.off()
 - Black dashed line: FDR = 0.1
 
 ```{r FDR_distribution}
-
-
 # Combining total data table 
 res <- rbind(shr_resList[['TPM']], shr_resList[['Counts']])
 res$Input <- factor(res$Input, levels=TvC)  # TvC=c("TPM", "Counts")
-
 # Create a plot presenting distribution of FDR
-jpeg(file="Plots/FDR_distribution.jpeg", width=1000, height=800, res=150)
 ggplot(res,
        aes(x=padj, color=Input)) + 
 geom_density(size=1, aes(y=..count..)) + 
@@ -774,8 +602,6 @@ geom_vline(xintercept=alpha,
            linetype="dashed",
            size=1) + 
 scale_x_continuous(breaks=seq(0, 1, by=0.1)) 
-dev.off()
-
 ```
 
 ### Results & Discussion 5:
@@ -792,14 +618,10 @@ dev.off()
 - Red dashed lines: log2FoldChange = -1 and 1 
 
 ```{r volcano_plot}
-
 # Set xlim for volcano plots
 xlim=c(-6, 6)    # has to be assined by users
-
 # Set a basic volcano plot function 
 Volcano_fn <- function(df, Label=NULL) {
-
-
 ggplot(res, 
        aes(x=log2FoldChange,
            y= -log10(padj),
@@ -818,12 +640,8 @@ geom_vline(xintercept=c(mLog[1], mLog[2]),
            size=1) + 
 xlim(xlim[1], xlim[2])
 }
-
 # Display the volcano plots by input
-jpeg(file="Plots/volcano.jpeg", width=1200, height=800, res=150)
 Volcano_fn(res)
-dev.off() 
-
 ```
 
 
@@ -832,22 +650,15 @@ dev.off()
 - **Log odds** threshold (y-axis): **> 20**
 
 ```{r high_logodds_genes}
-
 # Assign log odds threshold 
 LogOddsCut=20 
-
-
 # Add a column indicating high log odds genes 
 res <- res %>% 
     mutate(Label=ifelse(-log10(padj) > LogOddsCut, 
                                    Gene, 
                                    "")) 
-
 # Display the genes with volcano plots
-jpeg(file="Plots/volcano_with_genes.jpeg", width=1200, height=800, res=150)
 Volcano_fn(res, Label=res$Label) + geom_text_repel(color="black")
-dev.off()
-
 ```
 
 
@@ -865,10 +676,6 @@ dev.off()
 - **y-axis**: number of genes 
 
 ```{r L2FC_distribution}
-
-
-
-jpeg(file="Plots/l2fc_distribution.jpeg", width=1000, height=800, res=150)
 ggplot(res[res$FDR == "< 0.1", ],  # Subset rows with FDR < alpha 
        aes(x=log2FoldChange,
            color=Input)) + 
@@ -880,10 +687,6 @@ geom_vline(xintercept=c(mLog[1], mLog[2]),
            linetype="dashed", size=1) +
 ggtitle("Distribution of Log2 Folds by Input Type") + 
 xlim(xlim[1], xlim[2])
-dev.off()
-
-
-
 ```
 
 ### Results & Discussion 7: 
@@ -906,44 +709,30 @@ dev.off()
 - References: [**Harvard Chan Bioinformatics Core workshop**](https://github.com/hbctraining/DGE_workshop_salmon_online/blob/master/lessons/06_DGE_visualizing_results.md), [**DESeq2 doc "Heatmap of the count matrix"**](https://www.bioconductor.org/packages/devel/bioc/vignettes/DESeq2/inst/doc/DESeq2.html#heatmap-of-the-count-matrix)
 
 ```{r transcription_profiling}
-
-
-
 # Initialize a list 
 lowfdrList <- ddsList   # A list for normalized counts matrix with FDR below alpha
 highfoldList <- ddsList  # A list for normalized counts with log2foldchange over minLog
-
-
-
 for (x in TvC) {
-
     # Create filtering vectors with alpha and log2foldchange
     BelowAlpha <- shr_resList[[x]]$FDR == FDRv[1]
     overmLog <- abs(shr_resList[[x]]$log2FoldChange) > mLog[2]  # mLog has been set to c(-1, 1) previously
-
     # Extract transformed counts from vsd objects (TPM[['vsd']] and Counts[['vsd']]) 
     if (x == "TPM") {
-
         normCounts <- counts(TPM[['dds']], normalized=T)
     
     } else {
-
         normCounts <- counts(Counts[['dds']], normalized=T)
     }
-
     
     # Update the normalized count matrix with FDR below alpha
     lowfdrList[[x]] <- normCounts[BelowAlpha, ]
     highfoldList[[x]] <- normCounts[BelowAlpha & overmLog, ]
-
     summary(lowfdrList[[x]])
     summary(highfoldList[[x]])
 }
-
 # Initialize map lists 
 lowfdrMap <- ddsList
 highfoldMap <- ddsList 
-
 # Set a function creating a heatmap
 ProfileHeatmap_fn <- function(inputmatrix, Title1, Title2, Title3=NULL) {
     
@@ -958,25 +747,15 @@ ProfileHeatmap_fn <- function(inputmatrix, Title1, Title2, Title3=NULL) {
                         alpha, 
                         Title3)))
 }
-
 # Create and save heatmaps
 for (x in TvC) {
-
-    jpeg(file=paste0("Plots/profile_lowfdr_", x, ".jpeg"), 
-         width=1200, height=1200, res=150)
     lowfdrMap[[x]] <- ProfileHeatmap_fn(lowfdrList[[x]],
                                         Title1=x, 
                                         Title2="FDR <")
-    dev.off()
-
-    jpeg(file=paste0("Plots/profile_highfold_", x, ".jpeg"), 
-         width=1200, height=1200, res=150)
     highfoldMap[[x]] <- ProfileHeatmap_fn(highfoldList[[x]], 
                                           Title1=x, 
                                           Title2="FDR <",
                                           Title3=paste("+ Absolte Log2 Fold Change >", mLog[2])) 
-    dev.off()
-
 }
 ```
 
@@ -1000,10 +779,8 @@ for (x in TvC) {
 
 
 ```{r DEG_statistics}
-
 # Count number of NA genes  
 type=c("Zero Counts", "Outliers", "Total NA Genes") 
-
 NAstat <- res %>%
     group_by(Input) %>%
     summarize(zero=sum(is.na(log2FoldChange)), 
@@ -1014,18 +791,13 @@ NAstat <- res %>%
                                  Type == "outlier" ~ type[2], 
                                  Type == "total" ~ type[3]), 
                        levels=type))
-
-
 # Plot number of NA genes 
-jpeg(file="Plots/NAs.jpeg", width=800, height=800, res=150)
 ggplot(NAstat, aes(x=Type, y=Number, group=Input, fill=Input, label=Number)) + 
     geom_bar(stat="identity", position="dodge") + 
     theme_bw() +
     geom_text(position=position_dodge(width=1), vjust=1.5) + 
     ggtitle("Number of NA Genes") + 
     ylab("Number of Genes")
-dev.off()
-
 ```
 
 ### Results & Discussion 9: 
@@ -1047,55 +819,36 @@ dev.off()
 
 
 ```{r determining_DEGrank}
-
 # Create a new list having DE table with FDR below alpha
 lowfdr_resList <- shr_resList 
-
 for (x in TvC) { 
-
-
     lowfdr_resList[[x]] <- filter(shr_resList[[x]], 
                                   FDR == FDRv[1]) %>% 
     as.data.table()
-
-
 }
-
-
-
 # Initialize new lists in order to store rank-updated result DE tables 
 FDRrankList <- lowfdr_resList
 lfcList <- lowfdr_resList
 UPlfcList <- lowfdr_resList
 DOWNlfcList <- lowfdr_resList
-
 # Set a function creating a column for the rank
 Ranking_fn <- function(x) {mutate(x, Rank=1:nrow(x))}
-
-
-
 for (x in TvC) { 
-
     # Rearrange genes with FDR  
     FDRrankList[[x]] <- lowfdr_resList[[x]][order(padj),] %>%
         Ranking_fn()
-
     # Rearrange genew with absolute log2FoldChange 
     lfcList[[x]] <- lowfdr_resList[[x]][order(-abs(log2FoldChange)),] %>%
         Ranking_fn()
-
     # Rearrange genes with log2FoldChange (decreasing order)
     UPlfcList[[x]] <- lowfdr_resList[[x]][order(-log2FoldChange),] %>%
         Ranking_fn()
-
     # Rearrange genes with log2FoldChange (increasing order)
     DOWNlfcList[[x]] <- lowfdr_resList[[x]][order(log2FoldChange),] %>%
         Ranking_fn()
 }
-
 # Explore the ranks
 print(c(FDRrankList, lfcList, UPlfcList, DOWNlfcList))
-
 ```
 
 ## Comparing DEG ranks between TPM- and Counts-inputted DE analysis 
@@ -1104,10 +857,8 @@ print(c(FDRrankList, lfcList, UPlfcList, DOWNlfcList))
 
 
 ```{r comparing_DEGrank}
-
 # Set a function rebuilding DE tables with gene ranks 
 combineTable_fn <- function(List){
-
     # Select columns and join the data frames by gene
     full_join(List[[TvC[1]]][,.(Gene, Input, Rank, baseMean)], 
               List[[TvC[2]]][,.(Gene, Input, Rank, baseMean)], by="Gene") %>%
@@ -1117,15 +868,12 @@ combineTable_fn <- function(List){
            RankDiff=Rank.x-Rank.y, 
            MeanRank=(Rank.x+Rank.y)/2)
 } 
-
 # Explore outputs of the function
 head(combineTable_fn(FDRrankList))
 dim(combineTable_fn(FDRrankList))
 tail(combineTable_fn(FDRrankList))
-
 # Set a function plotting gene ranks between TPM- (x-axis) and Counts-Inputs (y-axis)
 compareRanks_fn <- function(df, rankedby) {
-
 ggplot(df, 
        aes(x=Rank.x, 
            y=Rank.y,
@@ -1139,10 +887,8 @@ ggtitle(paste(rankedby, "Ranking witn TPM vs Counts Inputs")) +
 scale_color_gradient(low="blue", high="red")
 }
    
-
 # Set a function plotting the rank difference over the gene expression level
 RankdiffOverMean_fn <- function(df, rankedby) {
-
 ggplot(df, 
        aes(x=logMeanExpression, 
            y=RankDiff,
@@ -1154,7 +900,6 @@ ggtitle(paste("Rank Difference Inputs (TPM - Counts) in", rankedby)) +
 geom_hline(yintercept=0, color="black", size=0.5) + 
 scale_color_gradient(low="blue", high="red")
 }
-
 ```
 
 
@@ -1169,35 +914,18 @@ scale_color_gradient(low="blue", high="red")
 - Dot color: gene expression level (log-baseMean)
 
 ```{r comparing_DEGrankI}
-
-
-jpeg(file="Plots/FDR_rank.jpeg", width=1000, height=800, res=150)
 # Ranked by FDR
 compareRanks_fn(combineTable_fn(FDRrankList), 
                 "FDR")
-dev.off()
-
-jpeg(file="Plots/lfc_rank.jpeg", width=1000, height=800, res=150)
 # Ranked by absolute fold change 
 compareRanks_fn(combineTable_fn(lfcList), 
                 "Absolute Log2FoldChange")
-dev.off()
-
-
-jpeg(file="Plots/UPlfc_rank.jpeg", width=1000, height=800, res=150)
 # Ranked by magnitude of positive fold change
 compareRanks_fn(combineTable_fn(UPlfcList), 
                 "Log2FoldChange (Increased)")
-dev.off()
-
-
-jpeg(file="Plots/DOWNlfc_rank.jpeg", width=1000, height=800, res=150)
 # Ranked by magnitude of negative fold change
 compareRanks_fn(combineTable_fn(DOWNlfcList), 
                 "Log2FoldChange (Decreased)")
-dev.off()
-
-
 ```
 
 ### Results & Discussion 10: 
@@ -1222,32 +950,18 @@ dev.off()
 
 
 ```{r comparing_DEGrankII}
-
-jpeg(file="Plots/FDRdiff_rank.jpeg", width=1000, height=800, res=150)
 # Ranked by FDR
 RankdiffOverMean_fn(combineTable_fn(FDRrankList), 
                 "FDR")
-dev.off()
-
-
-jpeg(file="Plots/lfcdiff_rank.jpeg", width=1000, height=800, res=150)
 # Ranked by absolute fold change 
 RankdiffOverMean_fn(combineTable_fn(lfcList), 
                 "Absolute Log2FoldChange")
-dev.off()
-
-jpeg(file="Plots/UPlfcdiff_rank.jpeg", width=1000, height=800, res=150)
 # Ranked by magnitude of positive fold change
 RankdiffOverMean_fn(combineTable_fn(UPlfcList), 
                 "Log2FoldChange (Increased)")
-dev.off()
-
-jpeg(file="Plots/DOWNlfcdiff_rank.jpeg", width=1000, height=800, res=150)
 # Ranked by magnitude of negative fold change
 RankdiffOverMean_fn(combineTable_fn(DOWNlfcList), 
                 "Log2FoldChange (Decreased)")
-dev.off()
-
 ```
 
 
@@ -1266,34 +980,26 @@ dev.off()
 
 
 ```{r upsetplotting}
-
 # Clean data to generate an upset plot
 res <- res %>%
-
     # Filter genes with valid padj 
     filter(!is.na(padj)) %>% 
-
     # Detect genes which are up/down/unchanged change patterns in either TPM and Counts inputs
     mutate(Up=ifelse(FDR == FDRv[1] & log2FoldChange > 0, Gene, ""), # What are upregulated genes? 
            Down=ifelse(FDR == FDRv[1] & log2FoldChange < 0, Gene, ""),  # What are downregulated genes? 
            Unchanged=ifelse(FDR == FDRv[2], Gene, ""),   # What are unchanged genes? 
            TPM_Input=ifelse(Input == "TPM", Gene, ""),   # What are the genes from TPM input? 
            Counts_Input=ifelse(Input == "Counts", Gene, ""))   # What are the genes from Counts input?
-
 # Create a list storing groups of interest
 upsetInput <- list(Up=res$Up, 
                    Down=res$Down, 
                    Unchanged=res$Unchanged, 
                    TPM_Input=res$TPM, 
                    Counts_Input=res$Counts)
-
 # Create the upset plot 
-jpeg(file="Plots/upset.jpeg", width=1000, height=800, res=150)
 upset(fromList(upsetInput), 
       sets.x.label="Number of Genes per Group", 
-      order.by="freq")
-dev.off()
-
+      order.by="freq") 
 ```
 
 
@@ -1305,6 +1011,3 @@ dev.off()
 ```{r sessionInfo}
 sessionInfo()
 ```
-
-
-
