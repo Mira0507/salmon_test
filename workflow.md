@@ -92,7 +92,7 @@ Output quant.sf files are saved in ./<sample_name>.salmon_quant
 
 ```terminal
 
-bash singlequant.bash
+bash singlequant.sh
 
 ```
 
