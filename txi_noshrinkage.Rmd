@@ -37,6 +37,8 @@ library(gridExtra)
 library(ggplotify)
 library(ggrepel)
 library(UpSetR)
+library(apeglm)
+library(ashr)
 ```
 
 ## Setting AnnotationHub
@@ -186,39 +188,35 @@ dim(txi_counts$counts)
 
 #### - The **DESeqDataSetFromTximport()** function generated an DESeq object (aka **dds**) with the **txi input**. 
 
-#### - **vst()** was run to perform variance stabilizing transformation instead of rlog() which takes longer time with similar characteristics. 
-
-#### - The **vsd** object created by vst() is used for not DE analysis but QC. 
-
 #### - References: [**DESeq2 doc "Transcript abundance files"**](https://www.bioconductor.org/packages/devel/bioc/vignettes/DESeq2/inst/doc/DESeq2.html#tximport), [**DESeq2 doc "Variance stabilizing transformation"**](https://www.bioconductor.org/packages/devel/bioc/vignettes/DESeq2/inst/doc/DESeq2.html#variance-stabilizing-transformation)
 
 
 
 
-```{r creating_dds_vsd}
+```{r creating_dds}
 
-# Set a function creating dds and vsd
-dds_vsd_fn <- function(txi) { 
+# Initialize a list storing dds object
+desList <- list()
 
-    # Create a DESeq object (so-calledd dds) 
-    des <- DESeqDataSetFromTximport(txi, 
+for (x in TvC) {
+
+    if (x == TvC[1]) {
+
+        desList[[x]] <- DESeqDataSetFromTximport(txi_tpm, 
+                                    colData=metadata,
+                                    design=~Group)
+    } else {
+
+        desList[[x]] <- DESeqDataSetFromTximport(txi_counts, 
                                     colData=metadata,
                                     design=~Group)
 
-    # Create a vsd object (so-called vsd) 
-    ves <- vst(des, blind=T)
-
-    # Output them as a list 
-    return(list(dds=des, vsd=ves))
+    }
 }
 
 
-TPM <- dds_vsd_fn(txi_tpm)
-Counts <- dds_vsd_fn(txi_counts)
 
-# Outputs
-# dds: TPM/Counts[[1]] or TPM/Counts[['dds']] 
-# vsd: TPM/Counts[[2]] or TPM/Counts[['vsd']]
+
 ```
 
 
@@ -227,24 +225,15 @@ Counts <- dds_vsd_fn(txi_counts)
 ```{r exploring_dds}
 
 # TPM 
-TPM[[1]]
-head(counts(TPM[[1]]))
+desList[[TvC[1]]]
+head(counts(desList[[TvC[1]]]))
 
 # Counts
-Counts[[1]]
-head(counts(Counts[[1]]))
+desList[[TvC[2]]]
+head(counts(desList[[TvC[2]]]))
 ```
 
-## Exploring created vsd
 
-```{r exploring_vsd}
-
-# TPM
-TPM[[2]]
-
-# Counts
-Counts[[2]]
-```
 
 
 ## Estimating size factors, dispersions, and conducting Wald Test
@@ -263,245 +252,72 @@ final dispersion estimates
 
 ```{r DESeq_prep}
 
-# Set a function estimating size factors, dispersions, and perform wald test
-DESeqPrep_fn <- function(List) {
-    
-    List[[1]] <- estimateSizeFactors(List[[1]])
-    List[[1]] <- estimateDispersions(List[[1]])
-    List[[1]] <- nbinomWaldTest(List[[1]])
-   
-    return(List)
+
+
+# Update dds 
+
+for (x in TvC) { 
+
+    desList[[x]] <- estimateSizeFactors(desList[[x]])
+    desList[[x]] <- estimateDispersions(desList[[x]])
+    desList[[x]] <- nbinomWaldTest(desList[[x]])
 }
 
-# Update dds with the function
-Counts <- DESeqPrep_fn(Counts) 
-TPM <- DESeqPrep_fn(TPM)
-```
-
-## Exploring size factors
-
-```{r exploring_sizefactors}
-
-sizeFactors(Counts[[1]])
-sizeFactors(TPM[[1]])
-
-# Size factors don't exist in the Counts dds!
-# Normalization factors are calculated in the Counts dds instead! 
-assays(Counts[[1]])
-assays(TPM[[1]])
-
-colData(Counts[[1]])
-colData(TPM[[1]])
-```
-
-## Plotting the size factors in TPM
-
-#### - The size factors are only available from TPM dds 
-
-#### - Blue dashed line: normalization factor = 1
-
-```{r plotting_sizefactors}
-
-# Extract and save the size factors in a data frame
-sizeFactor <- as.data.frame(round(sizeFactors(TPM[[1]]), 3))
-colnames(sizeFactor) <- 'Size_Factor'
-
-sizeFactor <- sizeFactor %>%
-    rownames_to_column(var="Sample") %>%
-    inner_join(metadata[, 1:ncol(metadata)-1], by="Sample") 
-
-# Create a plot comparing the size factors by sample
-ggplot(sizeFactor, aes(x=Sample, 
-                       y=Size_Factor, 
-                       fill=Group,
-                       label=Size_Factor)) +
-    geom_bar(stat="identity", width=0.8) +
-    theme_bw() + 
-    ggtitle("Size Factors in TPM-DESeq") +
-    geom_text(vjust=1.5) +
-    theme(axis.text.x=element_text(angle=45, 
-                                   vjust=0.5)) + ylab("Size Factor") + geom_hline(yintercept=1, color="blue", linetype="dashed")
-    
+# Explore the updates 
+desList
 ```
 
 
-## Plotting nornalization factors in the Counts
-
-#### - DESeq2 performs an internal normalization where geometric mean is calculated for each gene across all samples. The counts for a gene in each sample is then divided by this mean. The median of these ratios in a sample is the size factor for that sample.
-
-#### - Blue dashed line: normalization factor = 1
-
-#### - Colored **dots**: **normlization factors per gene** (y-axis) in each sample 
-
-#### - Box plots: distribution of the normalization facters in each group (see the second plot)
-
-#### - Reference: [**DESeq2 doc "Sample-/gene-dependent normalization factors"**](https://www.bioconductor.org/packages/devel/bioc/vignettes/DESeq2/inst/doc/DESeq2.html#log-fold-change-shrinkage-for-visualization-and-ranking)
-
-
-```{r plotting_normalizationfactors}
-# Extract and normalization factors in a data frame
-normf <- as.data.frame(normalizationFactors(Counts[[1]])) %>%
-    gather(Sample, Normalization_Factor) %>%
-    inner_join(metadata[, 1:2], by="Sample") 
-normf$Sample <- factor(normf$Sample, levels=SampleNames)
-normf$Group <- factor(normf$Group, levels=GroupLevel)
-# Create a scatter plot showing distribution of normalization factors 
-normFactors_plot <- ggplot(normf, 
-       aes(x=Sample, y=Normalization_Factor)) + 
-geom_jitter(alpha=0.5, aes(color=Group)) + 
-# Add a boxplot to provide statistics in each sample
-geom_boxplot(aes(x=Sample, y=Normalization_Factor), 
-             outlier.shape=NA) + 
-theme_bw() +
-ggtitle("Normalization Factors in Counts-DESeq") +
-theme(axis.text.x=element_text(angle=45, 
-                               vjust=0.5)) + 
-ylab("Normalization Factor / Gene") +
-# Add a dashed horizontal line to indicate where normalization factor=1
-geom_hline(yintercept=1, 
-           color="blue", 
-           linetype="dashed")
-# Print the normalization factor scatter plot 
-print(normFactors_plot)
-# Print the same plot with larger y-magnification in order to observe the box plot 
-normFactors_plot + 
-    ylim(0.5, 1.5)
-```
-
-### Results & Discussion 1: 
-
-#### - Patterns of the size factors (from TPM) and the normalization factors per gene (from Counts) by sample were similar in terms of magnitude   
-
-
-## Setting functions for QC plots
-
-#### - Reference: [**DESeq2 doc "Principal component plot of the samples"**](https://www.bioconductor.org/packages/devel/bioc/vignettes/DESeq2/inst/doc/DESeq2.html#principal-component-plot-of-the-samples), [**DESeq2 doc "Heatmap of the sample-to-sample distances"**](https://www.bioconductor.org/packages/devel/bioc/vignettes/DESeq2/inst/doc/DESeq2.html#heatmap-of-the-sample-to-sample-distances)
-
-```{r QCplot_functions}
-
-# Assigne what to compare
-GroupOfInterest <- Contrast[1] 
-
-# Set a function for a PCA plot
-QCPCA_fn <- function(inputList, Title) {
-
-    plotPCA(inputList[[2]],    # takes vsd
-            intgroup=GroupOfInterest) + theme_bw() + ggtitle(Title)
-}
-
-# Set heatmap annotation 
-ColOfInterest <- !colnames(metadata) %in% c("Sample", "Path")
-HeatmapAnno <- as.data.frame(metadata[, ColOfInterest])
-rownames(HeatmapAnno) <- SampleNames
-colnames(HeatmapAnno) <- colnames(metadata)[ColOfInterest]
-
-
-# Set a function for a correlation heatmap 
-QCcorrHeatmap_fn <- function(inputList, Title) {
-
-    # Extract transformed count matrix
-    mtx <- assay(inputList[[2]])      # takes vsd
-
-    # Calculate correlation and store in the matrix
-    mtx <- cor(mtx)
-    
-    
-    # Create a correlation heatmap
-    return(pheatmap(mtx, 
-             annotation=HeatmapAnno,
-             main=paste("Sample Correlation Heatmap:",
-                        Title)))
-}
-```
-
-
-## Sample QC: Principal Component Analysis 
-
-#### - Checkpoints in PCA: source of variation, sample outlier
-
-
-
-```{r QC_PCA}
-grid.arrange(QCPCA_fn(TPM, "QC PCA: TPM"), 
-             QCPCA_fn(Counts, "QC PCA: Counts"), 
-             nrow=2)
-```
-
-
-
-
-## Sample QC: Sample Correlation Heatmap
-
-#### - Checkpoints of correlation heatmap: distance between samples, correlation in a group
-
-#### - Upper: TPM input
-
-#### - Lower: Counts input
-
-```{r QC_correlation_heatmap}
-
-# TPM
-QCcorrHeatmap_fn(TPM, "TPM") 
-
-# Counts
-QCcorrHeatmap_fn(Counts, "Counts") 
-```
-
-### Results & Discussion 2: 
-
-#### - Unsupervised learning-mediated sample QC resulted in highly similar patterns between TPM and Counts 
-
-
-## Running DE analysis
-
+## Running DE analysis with or without shrinkage 
 
 ```{r DE_analysis}
 
 # Create a list for TPM and Counts dds 
-ddsList <- list(TPM=TPM[[1]], Counts=Counts[[1]]) 
+ddsList <- desList  # DE without shrinkage  
+normal.ddsList <- desList    # DE with "normal" shrinkage
+ape.ddsList <- desList       # DE with "apeglm" shrinkage
+ash.ddsList <- desList       # DE with "ashr" shrinkage
 
 for (x in TvC) {
+    
     # Run DESeq() 
-    ddsList[[x]] <- DESeq(ddsList[[x]])
+    ddsList[[x]] <- DESeq(desList[[x]])
     print(resultsNames(ddsList[[x]]))
+
+    normal.ddsList <- lfcShrink(ddsList[[x]],
+                                contrast=Contrast,
+                                type="normal")
+
+    ape.ddsList <- lfcShrink(ddsList[[x]],
+                             coef=resultsNames(ddsList[[x]])[2],
+                             type="apeglm")
+
+    ash.ddsList <- lfcShrink(ddsList[[x]],
+                             coef=resultsNames(ddsList[[x]])[2],
+                             type="ashr")
+
 }
 ```
 
-## Creating dispersion plots
-
-#### - Dispersion is important since estimation by DESeq2 algorithm is based on the assumption that genes with similar expression levels have similar dispersion. If an RNA-seq dataset doesn't satisfy this assumption, use other DE algorithms than DESeq2. 
-
-#### - References: [**DESeq2 doc "Dispersion plot and fitting alternatives**](https://www.bioconductor.org/packages/devel/bioc/vignettes/DESeq2/inst/doc/DESeq2.html#dispersion-plot-and-fitting-alternatives), [**Harvard Chan Bioinformatics Core workshop **](https://github.com/hbctraining/DGE_workshop_salmon_online/blob/master/lessons/04b_DGE_DESeq2_analysis.md)
-
-
-```{r dispersion_plot}
-
-# Plot dispersion  
-for (x in TvC) {
-
-    plotDispEsts(ddsList[[x]], 
-                 ylab="Dispersion", 
-                 xlab="Mean of Normalized Counts", 
-                 main=paste("Dispersion of", x, "Input"))
-}
-```
-
-### Results & Discussion 3:
-
-#### - Both inputs gave a goot fit
-
-#### - No major difference was seen in the dispersion plots between two conditions 
 
 
 
-## Extracting log2FoldChange and p-values without shrinkage
+
+
+
+
+
+
+
+## Extracting DE results with or without shrinkage
 
 #### - The **alpha** denotes threshold of **false discovery rate (FDR)** assigned by users.
 
 #### - In this analysis, the alpha is set to **0.1** 
 
 
-```{r extracting_log2FoldChanges}
+```{r extracting_results}
+
 # Set FDR threshold 
 alpha=0.1 
 
