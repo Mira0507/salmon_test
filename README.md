@@ -30,6 +30,12 @@ An html file rendered from singlequant_txi.Rmd
 **9. singlelquant_txi_plots.Rmd**   
 R code for saving plots in DE analysis with txi input in DESeq2 pipeline
 
-**10. workflow.md**   
+**10. DEGranking_shrinkage.Rmd**    
+R code for DEG ranking comparison with or without shrinkage by input
+
+**11.DEGranking_shrinkage.html**   
+An html file rendered from DEGranking_shrinkage.Rmd
+
+**12. workflow.md**   
 Entire workflow from raw data to downstream analysis
 
