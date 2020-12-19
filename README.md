@@ -33,7 +33,7 @@ R code for saving plots in DE analysis with txi input in DESeq2 pipeline
 **10. DEGranking_shrinkage.Rmd**    
 R code for DEG ranking comparison with or without shrinkage by input
 
-**11.DEGranking_shrinkage.html**   
+**11. DEGranking_shrinkage.html**   
 An html file rendered from DEGranking_shrinkage.Rmd
 
 **12. workflow.md**   
